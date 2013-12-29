@@ -23,25 +23,14 @@
  */
 
 #include <parser/source>
-#include <parser/tokenlist>
-#include <boost/concept/assert.hpp>
-#include <concepts/token-list-concept>
-#include <concepts/source-concept>
-
 
 namespace rasp {
-template <typename Source, typename TokenList>
+
 class Scanner {
  public :
-  //Scanner require TokenReservable concepts.
-  BOOST_CONCEPT_ASSERT((rasp::TokenReservable<TokenList>));
-  //Scanner require SourceReservable concepts.
-  BOOST_CONCEPT_ASSERT((rasp::SourceReservable<Source>));
-  
-  Scanner(Source source, TokenList tokenList);
-  void Tokenize();
+  Scanner(const Source* source);
+  Token scan();
  private :
-  Source source_;
-  TokenList tokenList_;
+  const Source* source_;
 }
 }

@@ -25,16 +25,17 @@
 
 #include <cstdio>
 #include <parser/scanner>
+#include <parser/tokenlist>
 
 
 namespace rasp{
 
-Scanner<Source, TokenList>::Scanner(Source source, TokenList tokenList)
+Scanner::Scanner(Source* source)
     : source_(source),
-      tokenList_(tokenList) {}
+      tokenList_(new TokenList()) {}
 
 
-void Scanner<Source, TokenList>::Tokenize() {
+void Scanner::Tokenize() {
   printf("Hello World");
 }
 }
