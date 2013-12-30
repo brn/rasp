@@ -48,7 +48,6 @@ TEST(ScannerTest, ScanStringLiteralTest_double_escaped_string) {
   ASSERT_STREQ(token.value(), "test \\\\");
 }
 
-
 TEST(ScannerTest, ScanStringLiteralTest_unterminated_string) {
   INIT(token, "'test", ScanStringLiteral)
   ASSERT_EQ(token.type(), rasp::Token::Type::ILLEGAL);
