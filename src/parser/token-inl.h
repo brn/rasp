@@ -25,35 +25,46 @@
 #ifndef PARSER_TOKEN_INL_H_
 #define PARSER_TOKEN_INL_H_
 
+#include <utility>
 #include "../utils/inline.h"
 
 namespace rasp {
+INLINE Token Token::Illegal(size_t start_col,
+    size_t end_col,
+    size_t line_number,
+    std::string&& message) {
+  return std::move(Token(Token::Type::ILLEGAL, start_col, end_col, line_number, std::move(message)));
+}
+
 INLINE Token::Token(Token::Type token,
-    int start_col,
-    int end_col,
-    int line_number,
-    const char* value) :
+    size_t start_col,
+    size_t end_col,
+    size_t line_number,
+    std::string&& value) :
     Token(token, start_col, end_col, line_number) {
   value_ = value;
 }
 
 INLINE Token::Token(Token::Type token,
-    int start_col,
-    int end_col,
-    int line_number) :
+    size_t start_col,
+    size_t end_col,
+    size_t line_number) :
     type_(token),
         start_col_(start_col_),
         end_col_(end_col_),
         line_number_(line_number) {
 }
 
-INLINE Token::Token(const Token& token) {
-  value_ = token.value_;
-  type_ = token.type_;
+INLINE Token::Token(Token&& token) :
+    value_(std::move(token.value_)),
+        type_(token.type_),
+        start_col_(token.start_col_),
+        end_col_(token.end_col_),
+        line_number_(token.line_number_) {
 }
 
 INLINE const char* Token::value() const {
-  return value_;
+  return value_.c_str();
 }
 
 INLINE Token::Type Token::type() const {

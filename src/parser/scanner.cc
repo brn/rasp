@@ -22,35 +22,51 @@
  * THE SOFTWARE.
  */
 
-
 #include <cstdio>
+#include <sstream>
 #include "scanner.h"
 #include "token.h"
 
-
-namespace rasp{
+namespace rasp {
 
 Scanner::Scanner(Source* source)
-    : source_(source){};
-
+:
+    source_(source) {
+}
+;
 
 Token Scanner::Scan() {
   printf("Hello World");
-  return Token(Token::Type::ABSTRACT, 0, 0, 0);
+  return Token(Token::Type::JS_ABSTRACT, 0, 0, 0);
 }
-
 
 Token Scanner::ScanStringLiteral() {
-  return Token(Token::Type::STRING_LITERAL, 0, 0, 0, "foo bar baz");
-}
+  char quote = source_->Advance();
+  std::stringstream ss;
+  bool escaped = false;
+  while (1) {
+    char ch = source_->Advance();
+    if (ch == quote) {
+      if (!escaped) {
+        break;
+      }
+      escaped = false;
+    } else if (ch == '\0') {
+      return std::move(Token::Illegal(0, 0, 0, "Unterminated string literal."));
+    } else if (ch == '\\') {
+      escaped = !escaped;
+    }
+    ss << ch;
+  }
 
+  return Token(Token::Type::JS_STRING_LITERAL, 0, 0, 0, ss.str());
+}
 
 Token Scanner::ScanDigit() {
-  return Token(Token::Type::NUMERIC_LITERAL, 0, 0, 0, "0");
+  return Token(Token::Type::JS_NUMERIC_LITERAL, 0, 0, 0, std::string("0"));
 }
 
-
 Token Scanner::ScanIdentifier() {
-  return Token(Token::Type::IDENTIFIER, 0, 0, 0, "fooBarBaz");
+  return Token(Token::Type::JS_IDENTIFIER, 0, 0, 0, std::string("fooBarBaz"));
 }
 }

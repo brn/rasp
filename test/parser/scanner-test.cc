@@ -22,19 +22,38 @@
  * THE SOFTWARE.
  */
 
-
 #include "../../src/parser/scanner.h"
 #include <gtest/gtest.h>
 
+#define INIT(var, str, method)\
+  rasp::Source source((str));\
+  rasp::Scanner scanner(&source);\
+  auto var = scanner.##method();
 
-TEST(ScannerTest, ScanStringLiteralTest) {
-  rasp::Source source("'test string'");
-  rasp::Scanner scanner(&source);
-  auto token = scanner.ScanStringLiteral();
-  ASSERT_EQ(token.type(), rasp::Token::Type::STRING_LITERAL);
+TEST(ScannerTest, ScanStringLiteralTest_normal) {
+  INIT(token, "'test string'", ScanStringLiteral)
+  ASSERT_EQ(token.type(), rasp::Token::Type::JS_STRING_LITERAL);
   ASSERT_STREQ(token.value(), "test string");
 }
 
+TEST(ScannerTest, ScanStringLiteralTest_escaped_string) {
+  INIT(token, "'test \\'string'", ScanStringLiteral)
+  ASSERT_EQ(token.type(), rasp::Token::Type::JS_STRING_LITERAL);
+  ASSERT_STREQ(token.value(), "test \\'string");
+}
+
+TEST(ScannerTest, ScanStringLiteralTest_double_escaped_string) {
+  INIT(token, "'test \\\\'string'", ScanStringLiteral)
+  ASSERT_EQ(token.type(), rasp::Token::Type::JS_STRING_LITERAL);
+  ASSERT_STREQ(token.value(), "test \\\\");
+}
+
+
+TEST(ScannerTest, ScanStringLiteralTest_unterminated_string) {
+  INIT(token, "'test", ScanStringLiteral)
+  ASSERT_EQ(token.type(), rasp::Token::Type::ILLEGAL);
+  ASSERT_STREQ(token.value(), "Unterminated string literal.");
+}
 
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
