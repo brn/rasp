@@ -18,28 +18,32 @@
     },
   },
   'targets': [
-    {
-      'target_name': 'rasp',
-      'product_name': 'rasp',
-      'type': 'executable',
-      'sources': [
-        '../src/parser/scanner.cc',
-      ],
-      'xcode_settings': {
-        'GCC_INLINES_ARE_PRIVATE_EXTERN': 'YES', # '-fvisibility-inlines-hidden'
-        'GCC_SYMBOLS_PRIVATE_EXTERN': 'YES', # '-fvisibility=hidden'
-      },
-    },
+    #{
+    #  'target_name': 'rasp',
+    #  'product_name': 'rasp',
+    #  'type': 'executable',
+    #  'sources': [
+    #    '../src/parser/scanner.cc',
+    #  ],
+    #  'xcode_settings': {
+    #    'GCC_INLINES_ARE_PRIVATE_EXTERN': 'YES', # '-fvisibility-inlines-hidden'
+    #    'GCC_SYMBOLS_PRIVATE_EXTERN': 'YES', # '-fvisibility=hidden'
+    #  },
+    #},
     {
       'target_name': 'scanner_test',
       'product_name': 'ScannerTest',
       'type': 'executable',
+      'include_dirs' : ['../lib'],
+      'defines' : ['GTEST_HAS_RTTI=0', 'UNIT_TEST=1'],
       'sources': [
         '../src/parser/scanner.h',
         '../src/parser/scanner.cc',
         '../src/parser/source.h',
         '../src/parser/source.cc',
-        '../test/parser/scanner-test.cc',
+        '../lib/gtest/gtest.h',
+        '../lib/gtest/gtest-all.cc',
+        '../test/parser/scanner-test.cc'
       ],
       'xcode_settings': {
       },

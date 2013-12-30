@@ -23,14 +23,20 @@
  */
 
 
-#include "../../src/parser/scanner.h";
-#include "../../lib/gtest/gtest.h";
+#include "../../src/parser/scanner.h"
+#include <gtest/gtest.h>
 
 
 TEST(ScannerTest, ScanStringLiteralTest) {
-  Source source("'test string'");
-  Scanner scanner(&source);
-  Token token = scanner.ScanStringLiteral();
-  ASSERT_EQ(token.type(), Token::Type::STRING_LITERAL);
+  rasp::Source source("'test string'");
+  rasp::Scanner scanner(&source);
+  auto token = scanner.ScanStringLiteral();
+  ASSERT_EQ(token.type(), rasp::Token::Type::STRING_LITERAL);
   ASSERT_STREQ(token.value(), "test string");
+}
+
+
+int main(int argc, char **argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }

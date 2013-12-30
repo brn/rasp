@@ -25,13 +25,14 @@
 #ifndef PARSER_TOKEN_H_
 #define PARSER_TOKEN_H_
 
-#include "../utils/inline.h";
+#include "../utils/inline.h"
 
 namespace rasp {
 class Token {
   public:
-    enum Type {
-      ABSTRACT = 0,
+    enum class Type
+      : int {
+        ABSTRACT = 0,
       BOOLEAN,
       BREAK,
       BYTE,
@@ -70,7 +71,7 @@ class Token {
       NAN,
       NATIVE,
       NEW,
-      NULL,
+      JS_NULL,
       PACKAGE,
       PRIVATE,
       PROTECTED,
@@ -129,16 +130,21 @@ class Token {
       SET,
       GET,
       REST_PARAMETER,
-      EOF
+      END_OF_INPUT
     };
 
-    Token(Token token,
+    INLINE Token(Token::Type token,
         int start_col,
         int end_col,
         int line_number,
-        const char* value = nullptr);
+        const char* value);
 
-    Token(const Token& token);
+    INLINE Token(Token::Type token,
+        int start_col,
+        int end_col,
+        int line_number);
+
+    INLINE Token(const Token& token);
 
     ~Token() = default;
 
@@ -146,7 +152,7 @@ class Token {
     const char* value() const;
 
     INLINE
-    Token type() const;
+    Token::Type type() const;
 
     INLINE
     int start_col() const;
@@ -159,12 +165,12 @@ class Token {
 
   private:
     const char* value_;
-    Token::Type token_;
+    Token::Type type_;
     int start_col_;
     int end_col_;
     int line_number_;
-}
+};
 }
 
-#include "token-inl.h";
+#include "token-inl.h"
 #endif

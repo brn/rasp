@@ -25,44 +25,51 @@
 #ifndef PARSER_TOKEN_INL_H_
 #define PARSER_TOKEN_INL_H_
 
-#include "../utils/inline.h";
+#include "../utils/inline.h"
 
 namespace rasp {
-Token::Token(Token token,
+INLINE Token::Token(Token::Type token,
     int start_col,
     int end_col,
     int line_number,
-    const char* value = nullptr) :
-    token_(token),
-        value_(value),
-        start_col_(start_col),
-        end_col_(end_col),
+    const char* value) :
+    Token(token, start_col, end_col, line_number) {
+  value_ = value;
+}
+
+INLINE Token::Token(Token::Type token,
+    int start_col,
+    int end_col,
+    int line_number) :
+    type_(token),
+        start_col_(start_col_),
+        end_col_(end_col_),
         line_number_(line_number) {
 }
 
-Token::Token(const Token& token) {
-  this->value_ = token.value_;
-  this->token_ = token.token_;
+INLINE Token::Token(const Token& token) {
+  value_ = token.value_;
+  type_ = token.type_;
 }
 
 INLINE const char* Token::value() const {
-  return this->value_;
+  return value_;
 }
 
 INLINE Token::Type Token::type() const {
-  return this->type_;
+  return type_;
 }
 
 INLINE int Token::start_col() const {
-  return this->start_col_;
+  return start_col_;
 }
 
 INLINE int Token::end_col() const {
-  return this->end_col_;
+  return end_col_;
 }
 
 INLINE int Token::line_number() const {
-  return this->line_number_;
+  return line_number_;
 }
 }
 

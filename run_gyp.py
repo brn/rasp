@@ -6,7 +6,7 @@ import sys
 import gyp
 script_dir = os.path.dirname(os.path.abspath(__file__))
 root = os.path.join(os.path.normpath(script_dir), 'build');
-print script_dir
+
 sys.path.insert(0, os.path.join(root, 'gyp'))
 
 def run_gyp(args):

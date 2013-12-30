@@ -22,15 +22,15 @@
  * THE SOFTWARE.
  */
 
-#include "source.h";
-#include "../utils/bytelen.h";
+#include "source.h"
+#include "../utils/bytelen.h"
 
 namespace rasp {
 Source::Source(const char* source) :
     current_position_(0), source_(source) {
   source_size_ = BYTELEN(source);
 }
-}
+
 
 /**
  * Get next char from the source content
@@ -46,12 +46,12 @@ char Source::Advance() {
 /**
  * Lookahead source content with specified position.
  */
-char Source::Peek(size_t char_position) {
+char Source::Peek(size_t char_position) const {
   size_t next_position = current_position_ + char_position;
   if (next_position >= source_size_) {
     return '\0';
   }
-  return source_[next_position_];
+  return source_[next_position];
+}
 }
 
-#endif
