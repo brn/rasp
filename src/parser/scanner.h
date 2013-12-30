@@ -22,15 +22,47 @@
  * THE SOFTWARE.
  */
 
-#include <parser/source>
+#ifndef PARSER_SCANNER_H_
+#define PARSER_SCANNER_H_
+
+#include "source.h";
+#include "../utils/visibility.h";
 
 namespace rasp {
 
 class Scanner {
- public :
-  Scanner(const Source* source);
-  Token scan();
- private :
-  const Source* source_;
+  public:
+    /**
+     * @param source The source file content.
+     */
+    Scanner(const Source* source);
+
+    /**
+     * Scan the source file from the current position to the next token position.
+     */
+    const Token Scan();
+
+
+  VISIBLE_FOR_TEST(private) :
+    /**
+     * Scan string literal.
+     */
+    const Token ScanStringLiteral();
+
+    /**
+     * Scan digit literal(includes Hex, Double, Integer)
+     */
+    const Token ScanDigit();
+
+    /**
+     * Scan identifier.
+     */
+    const Token ScanIdentifier();
+
+
+  private:
+    const Source* source_;
 }
 }
+
+#endif

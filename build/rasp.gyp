@@ -1,5 +1,5 @@
 {
-  'includes': ['common.gypi'],
+  'includes': ['commons.gypi'],
   'make_global_settings': [
     ['CXX','/usr/bin/clang++'],
     ['LINK','/usr/bin/clang++'],
@@ -22,9 +22,6 @@
       'target_name': 'rasp',
       'product_name': 'rasp',
       'type': 'executable',
-      'include_dirs': [
-        '../include',
-      ],
       'sources': [
         '../src/parser/scanner.cc',
       ],
@@ -37,11 +34,12 @@
       'target_name': 'scanner_test',
       'product_name': 'ScannerTest',
       'type': 'executable',
-      'include_dirs': [
-        '../include',
-      ],
       'sources': [
-        '../test/scanner-test.cc',
+        '../src/parser/scanner.h',
+        '../src/parser/scanner.cc',
+        '../src/parser/source.h',
+        '../src/parser/source.cc',
+        '../test/parser/scanner-test.cc',
       ],
       'xcode_settings': {
       },

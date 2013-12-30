@@ -24,18 +24,33 @@
 
 
 #include <cstdio>
-#include <parser/scanner>
-#include <parser/tokenlist>
+#include "scanner.h";
+#include "token.h";
 
 
 namespace rasp{
 
 Scanner::Scanner(Source* source)
-    : source_(source),
-      tokenList_(new TokenList()) {}
+    : source_(source);
 
 
-void Scanner::Tokenize() {
+const Token Scanner::Scan() {
   printf("Hello World");
+  return Token(Token::Type::ABSTRACT);
+}
+
+
+const Token Scanner::ScanStringLiteral() {
+  return Token(Token::Type::STRING_LITERAL, "foo bar baz");
+}
+
+
+const Token Scanner::ScanDigit() {
+  return Token(Token::Type::DIGIT, "0");
+}
+
+
+const Token Scanner::ScanIdentifier() {
+  return Token(Token::Type::IDENT, "fooBarBaz");
 }
 }
