@@ -133,50 +133,70 @@ class Token {
       END_OF_INPUT,
       ILLEGAL
     };
+  
 
-    INLINE static Token Illegal(size_t start_col,
-        size_t end_col,
-        size_t line_number,
-        std::string&& message);
+  INLINE static Token Illegal(size_t start_col,
+                              size_t end_col,
+                              size_t line_number,
+                              std::string&& message) {
+    return std::move(Token(Token::Type::ILLEGAL, start_col, end_col, line_number, std::move(message)));
+  }
 
-    INLINE Token(Token::Type token,
-        size_t start_col,
-        size_t end_col,
-        size_t line_number,
-        std::string&& value);
+  Token(Token::Type token,
+               size_t start_col,
+               size_t end_col,
+               size_t line_number,
+               std::string&& value) :
+      Token(token, start_col, end_col, line_number) {
+    value_ = value;
+  }
 
-    INLINE Token(Token::Type token,
-        size_t start_col,
-        size_t end_col,
-        size_t line_number);
+  Token(Token::Type token,
+               size_t start_col,
+               size_t end_col,
+               size_t line_number) :
+      type_(token),
+      start_col_(start_col_),
+      end_col_(end_col_),
+      line_number_(line_number) {
+  }
 
-    INLINE Token(Token&& token);
+  Token(Token&& token) :
+      value_(std::move(token.value_)),
+      type_(token.type_),
+      start_col_(token.start_col_),
+      end_col_(token.end_col_),
+      line_number_(token.line_number_) {
+  }
 
-    ~Token() = default;
+  ~Token() = default;
 
-    INLINE
-    const char* value() const;
+  INLINE const char* value() const {
+    return value_.c_str();
+  }
 
-    INLINE
-    Token::Type type() const;
+  INLINE Token::Type type() const {
+    return type_;
+  }
+  
+  INLINE size_t start_col() const {
+    return start_col_;
+  }
 
-    INLINE
-    int start_col() const;
+  INLINE size_t end_col() const {
+    return end_col_;
+  }
 
-    INLINE
-    int end_col() const;
-
-    INLINE
-    int line_number() const;
+  INLINE size_t line_number() const {
+    return line_number_;
+  }
 
   private:
     std::string value_;
     Token::Type type_;
-    int start_col_;
-    int end_col_;
-    int line_number_;
+    size_t start_col_;
+    size_t end_col_;
+    size_t line_number_;
 };
 }
-
-#include "token-inl.h"
 #endif

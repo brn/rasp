@@ -33,7 +33,7 @@ class Source {
     Source(const char* source);
     ~Source() = default;
     char Advance();
-    char Peek(size_t char_count) const;
+    char Peek(size_t char_count = 0) const;
   private :
     size_t source_size_;
     size_t current_position_;

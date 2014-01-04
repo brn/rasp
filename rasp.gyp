@@ -34,16 +34,17 @@
       'target_name': 'scanner_test',
       'product_name': 'ScannerTest',
       'type': 'executable',
-      'include_dirs' : ['../lib'],
+      'include_dirs' : ['./lib'],
       'defines' : ['GTEST_HAS_RTTI=0', 'UNIT_TEST=1'],
       'sources': [
-        '../src/parser/scanner.h',
-        '../src/parser/scanner.cc',
-        '../src/parser/source.h',
-        '../src/parser/source.cc',
-        '../lib/gtest/gtest.h',
-        '../lib/gtest/gtest-all.cc',
-        '../test/parser/scanner-test.cc'
+        './src/parser/token.h',
+        './src/parser/scanner.h',
+        './src/parser/scanner.cc',
+        './src/parser/source.h',
+        './src/parser/source.cc',
+        './lib/gtest/gtest.h',
+        './lib/gtest/gtest-all.cc',
+        './test/parser/scanner-test.cc'
       ],
       'xcode_settings': {
       },

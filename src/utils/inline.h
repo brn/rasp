@@ -4,7 +4,7 @@
 #ifdef _WIN32
 #define INLINE inline
 #elif defined(__GNUC__)
-#define INLINE __attribute((always_inline, flatten));
+#define INLINE inline __attribute__((always_inline));
 #endif
 
 #endif

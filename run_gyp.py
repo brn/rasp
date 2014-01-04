@@ -1,13 +1,19 @@
 #!/usr/bin/env python
-import glob
-import os
-import shlex
-import sys
-import gyp
-script_dir = os.path.dirname(os.path.abspath(__file__))
-root = os.path.join(os.path.normpath(script_dir), 'build');
 
-sys.path.insert(0, os.path.join(root, 'gyp'))
+import os
+import sys
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+root = os.path.normpath(script_dir);
+build = os.path.join(os.path.normpath(script_dir), 'build');
+sys.path.insert(0, os.path.join(os.path.join(build, 'gyp'), 'pylib'))
+
+import glob
+import shlex
+import gyp
+
+# Directory within which we want all generated files (including Makefiles)
+# to be written.
 
 def run_gyp(args):
   rc = gyp.main(args)
@@ -26,11 +32,11 @@ if __name__ == '__main__':
   else:
     args.append(os.path.join(os.path.abspath(root), 'rasp.gyp'))
     common_fn  = os.path.join(os.path.abspath(root), 'commons.gypi')
-
+  print common_fn
   if os.path.exists(common_fn):
     args.extend(['-I', common_fn])
 
-  args.append('--depth=' + root)
+  args.append('--depth=./')
   
   additional_include = os.getenv("INCLUDE")
   additional_lib = os.getenv("LIB")
@@ -43,15 +49,18 @@ if __name__ == '__main__':
     args.append('-Dadditional_lib=' + additional_lib)
   else :
     additional_lib = ''
-
+    
   # There's a bug with windows which doesn't allow this feature.
   if sys.platform != 'win32':
     # Tell gyp to write the Makefiles into output_dir
-    args.extend(['--generator-output', output_dir])
+    args.extend(['--generator-output', build])
     # Tell make to write its output into the same dir
-    args.extend(['-Goutput_dir=' + output_dir])
+    args.extend(['-Goutput_dir=' + build])
     # Create Makefiles, not XCode projects
+  if sys.platform != 'darwin':
     args.extend('-f make'.split())
+  else:
+    args.extend('-f xcode'.split())
 
   args.append('-Dtarget_arch=ia32')
   args.append('-Dcomponent=static_library')

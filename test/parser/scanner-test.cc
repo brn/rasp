@@ -22,36 +22,60 @@
  * THE SOFTWARE.
  */
 
-#include "../../src/parser/scanner.h"
 #include <gtest/gtest.h>
+#include "../../src/parser/scanner.h"
 
-#define INIT(var, str, method)\
+#define INIT(var, str)\
   rasp::Source source((str));\
   rasp::Scanner scanner(&source);\
-  auto var = scanner.##method();
+  auto var = scanner.Scan();
 
 TEST(ScannerTest, ScanStringLiteralTest_normal) {
-  INIT(token, "'test string'", ScanStringLiteral)
+  INIT(token, "'test string'")
   ASSERT_EQ(token.type(), rasp::Token::Type::JS_STRING_LITERAL);
   ASSERT_STREQ(token.value(), "test string");
 }
 
 TEST(ScannerTest, ScanStringLiteralTest_escaped_string) {
-  INIT(token, "'test \\'string'", ScanStringLiteral)
+  INIT(token, "'test \\'string'")
   ASSERT_EQ(token.type(), rasp::Token::Type::JS_STRING_LITERAL);
   ASSERT_STREQ(token.value(), "test \\'string");
 }
 
 TEST(ScannerTest, ScanStringLiteralTest_double_escaped_string) {
-  INIT(token, "'test \\\\'string'", ScanStringLiteral)
+  INIT(token, "'test \\\\'string'")
   ASSERT_EQ(token.type(), rasp::Token::Type::JS_STRING_LITERAL);
   ASSERT_STREQ(token.value(), "test \\\\");
 }
 
 TEST(ScannerTest, ScanStringLiteralTest_unterminated_string) {
-  INIT(token, "'test", ScanStringLiteral)
+  INIT(token, "'test")
   ASSERT_EQ(token.type(), rasp::Token::Type::ILLEGAL);
   ASSERT_STREQ(token.value(), "Unterminated string literal.");
+}
+
+TEST(ScannerTest, ScanDigit_double) {
+  INIT(token, ".3032")
+  ASSERT_EQ(token.type(), rasp::Token::Type::JS_NUMERIC_LITERAL);
+  ASSERT_STREQ(token.value(), ".3032");
+}
+
+TEST(ScannerTest, ScanDigit_hex) {
+  INIT(token, "0xFFCC33")
+  ASSERT_EQ(token.type(), rasp::Token::Type::JS_NUMERIC_LITERAL);
+  ASSERT_STREQ(token.value(), "0xFFCC33");
+}
+
+TEST(ScannerTest, ScanDigit_int) {
+  INIT(token, "1349075")
+  ASSERT_EQ(token.type(), rasp::Token::Type::JS_NUMERIC_LITERAL);
+  ASSERT_STREQ(token.value(), "1349075");
+}
+
+TEST(ScannerTest, ScanDigit_double2) {
+  INIT(token, "1349.075")
+  ASSERT_EQ(token.type(), rasp::Token::Type::JS_NUMERIC_LITERAL);
+  ASSERT_STREQ(token.value(), "1349.075");
 }
 
 int main(int argc, char **argv) {

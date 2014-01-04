@@ -32,37 +32,62 @@
 namespace rasp {
 
 class Scanner {
-  public:
-    /**
-     * @param source The source file content.
-     */
-    Scanner(Source* source);
+ public:
+  /**
+   * @param source The source file content.
+   */
+  Scanner(Source* source);
 
-    /**
-     * Scan the source file from the current position to the next token position.
-     */
-    Token Scan();
-
-
-  VISIBLE_FOR_TEST(private) :
-    /**
-     * Scan string literal.
-     */
-    Token ScanStringLiteral();
-
-    /**
-     * Scan digit literal(includes Hex, Double, Integer)
-     */
-    Token ScanDigit();
-
-    /**
-     * Scan identifier.
-     */
-    Token ScanIdentifier();
+  /**
+   * Scan the source file from the current position to the next token position.
+   */
+  Token Scan();
 
 
-  private:
-    Source* source_;
+ private :
+  /**
+   * Scan string literal.
+   */
+  Token ScanStringLiteral();
+
+  /**
+   * Scan digit literal(includes Hex, Double, Integer)
+   */
+  Token ScanDigit();
+
+  /**
+   * Scan identifier.
+   */
+  Token ScanIdentifier();
+
+  Token ScanInteger(char ch, char peek);
+
+  Token ScanHex(char ch, char peek);
+
+  Token ScanDouble(char ch, char peek);
+  
+  INLINE bool IsNumericLiteral(char ch) const {
+    return ch >= '0' && ch <= '9';
+  }
+
+  INLINE bool IsHexRange(char ch) const {
+    return IsNumericLiteral(ch) ||
+        (ch >= 'a' && ch <= 'f') ||
+        (ch >= 'A' && ch <= 'F');
+  }
+
+  INLINE bool IsStringLiteralStart(char ch) const {
+    return ch == 34 || ch == 39;
+  }
+
+  INLINE bool IsDigitStart(char ch) const {
+    char peek = source_->Peek(1);
+    return IsNumericLiteral(ch) ||
+        (ch == '.' && IsNumericLiteral(peek)) ||
+        (ch == '0' && peek == 'x');
+  }
+  
+  Source* source_;
 };
 }
 
