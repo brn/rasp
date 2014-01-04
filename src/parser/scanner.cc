@@ -114,15 +114,26 @@ Token Scanner::ScanInteger(char ch, char peek) {
   ss << ch;
   ch = source_->Advance();
   bool js_double = false;
+  bool exponent = false;
   while (1) {
     if (IsNumericLiteral(ch)) {
       ss << ch;
-    } else if (ch == '.' && !js_double && IsNumericLiteral(source_->Peek())) {
+      exponent = false;
+    } else if (exponent && ch == '+' || ch == '-') {
+      ss << ch;
+    } else if (exponent) {
+      return std::move(Token::Illegal(0, 0, 0, "Unrecognized token."));
+    } else if (!exponent &&
+               ch == '.' &&
+               !js_double && IsNumericLiteral(source_->Peek())) {
       ss << ch;
       ss << source_->Advance();
       js_double = true;
     } else if (ch == '.' && js_double) {
       return std::move(Token::Illegal(0, 0, 0, "Unrecognized token."));
+    } else if (ch == 'e' || ch == 'E') {
+      exponent = true;
+      ss << ch;
     } else {
       break;
     }
