@@ -22,20 +22,119 @@
  * THE SOFTWARE.
  */
 
-
 #include <cstdio>
-#include <parser/scanner>
-#include <parser/tokenlist>
+#include <sstream>
+#include "scanner.h"
+#include "token.h"
+#include "../utils/inline.h"
 
 
-namespace rasp{
+namespace rasp {
+
 
 Scanner::Scanner(Source* source)
-    : source_(source),
-      tokenList_(new TokenList()) {}
+    : source_(source) {}
 
 
-void Scanner::Tokenize() {
-  printf("Hello World");
+Token Scanner::Scan() {
+  char peek = source_->Peek();
+
+  if (IsStringLiteralStart(peek)) {
+    return std::move(ScanStringLiteral());
+  } else if (IsDigitStart(peek)) {
+    return std::move(ScanDigit());
+  }
+  return std::move(Token::Illegal(0, 0, 0, "Unrecognized token."));
 }
+
+Token Scanner::ScanStringLiteral() {
+  char quote = source_->Advance();
+  std::stringstream ss;
+  bool escaped = false;
+  while (1) {
+    char ch = source_->Advance();
+    if (ch == quote) {
+      if (!escaped) {
+        break;
+      }
+      escaped = false;
+    } else if (ch == '\0') {
+      return std::move(Token::Illegal(0, 0, 0, "Unterminated string literal."));
+    } else if (ch == '\\') {
+      escaped = !escaped;
+    }
+    ss << ch;
+  }
+
+  return std::move(Token(Token::Type::JS_STRING_LITERAL, 0, 0, 0, ss.str()));
+}
+
+Token Scanner::ScanDigit() {
+  char ch = source_->Advance();
+  char peek = source_->Peek();
+  if (ch == '.' && IsNumericLiteral(peek)) {
+    return ScanDouble(ch, peek);
+  } else if (ch == '0' && peek == 'x') {
+    return ScanHex(ch, peek);
+  } else if (IsNumericLiteral(ch)) {
+    return ScanInteger(ch, peek);
+  }
+  return std::move(Token::Illegal(0, 0, 0, "Unrecognized token."));
+}
+
+
+Token Scanner::ScanDouble(char ch, char peek) {
+  std::stringstream ss;
+  ss << ch;
+  ch = source_->Advance();
+  while (IsNumericLiteral(ch)) {
+    ss << ch;
+    ch = source_->Advance();
+  }
+  return std::move(Token(Token::Type::JS_NUMERIC_LITERAL, 0, 0, 0, ss.str()));
+}
+
+
+Token Scanner::ScanHex(char ch, char peek) {
+  std::stringstream ss;
+  ss << ch;
+  ch = source_->Advance();
+  ss << ch;
+  ch = source_->Advance();
+  while (IsHexRange(ch)) {
+    ss << ch;
+    ch = source_->Advance();
+  }
+  return std::move(Token(Token::Type::JS_NUMERIC_LITERAL, 0, 0, 0, ss.str()));
+}
+
+
+Token Scanner::ScanInteger(char ch, char peek) {
+  std::stringstream ss;
+  ss << ch;
+  ch = source_->Advance();
+  bool js_double = false;
+  while (1) {
+    if (IsNumericLiteral(ch)) {
+      ss << ch;
+    } else if (ch == '.' && !js_double && IsNumericLiteral(source_->Peek())) {
+      ss << ch;
+      ss << source_->Advance();
+      js_double = true;
+    } else if (ch == '.' && js_double) {
+      return std::move(Token::Illegal(0, 0, 0, "Unrecognized token."));
+    } else {
+      break;
+    }
+    ch = source_->Advance();
+  }
+  return std::move(Token(Token::Type::JS_NUMERIC_LITERAL, 0, 0, 0, ss.str()));
+}
+
+
+Token Scanner::ScanIdentifier() {
+  return Token(Token::Type::JS_IDENTIFIER, 0, 0, 0, std::string("fooBarBaz"));
+}
+
+
 }

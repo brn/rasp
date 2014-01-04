@@ -22,112 +22,181 @@
  * THE SOFTWARE.
  */
 
+#ifndef PARSER_TOKEN_H_
+#define PARSER_TOKEN_H_
+
+#include <string>
+#include "../utils/inline.h"
+
 namespace rasp {
-enum class Token: int {
-  ABSTRACT = 0,
-  BOOLEAN,
-  BREAK,
-  BYTE,
-  CASE, 
-  CATCH,
-  CHAR,
-  CLASS,
-  CONST,
-  CONTINUE,
-  DEBUGGER,
-  DEFAULT,
-  DELETE,
-  DO,
-  DOUBLE,
-  ELSE,
-  ENUM,
-  EXPORT,
-  EXTENDS,
-  FALSE,
-  FINAL,
-  FINALLY,
-  FLOAT,
-  FOR,
-  FUNCTION,
-  GOTO,
-  IF,
-  IMPLEMENTS,
-  IMPORT,
-  IN,
-  INSTANCEOF,
-  INT,
-  INTERFACE,
-  LET,
-  LONG,
-  MODULE,
-  NAN,
-  NATIVE,
-  NEW,
-  K_NULL,
-  PACKAGE_RESERVED,
-  PRIVATE,
-  PROTECTED,
-  PUBLIC,
-  RETURN,
-  SHORT,
-  STATIC,
-  SUPER,
-  SWITCH,
-  SYNCHRONIZED,
-  THIS,
-  THROW,
-  THROWS,
-  TRANSIENT,
-  TRUE,
-  TRY,
-  TYPEOF,
-  VAR,
-  VOID,
-  VOLATILE,
-  WHILE,
-  WITH,
-  EACH,
-  YIELD,
-  ASSERT,
-  MOCHA_SOURCE,
-  MOCHA_INCLUDE,
-  MOCHA_VERSIONOF,
-  MOCHA_PRAGMA,
-  INCREMENT,
-  DECREMENT,
-  EQUAL,
-  SHIFT_LEFT,
-  SHIFT_RIGHT,
-  LESS_EQUAL,
-  GREATER_EQUAL,
-  EQ,
-  NOT_EQUAL,
-  NOT_EQ,
-  U_SHIFT_RIGHT,
-  ADD_LET,
-  SUB_LET,
-  DIV_LET,
-  MOD_LET,
-  MUL_LET,
-  LOGICAL_AND,
-  LOGICAL_OR,
-  SHIFT_LEFT_LET,
-  SHIFT_RIGHT_LET,
-  U_SHIFT_RIGHT_LET,
-  NOT_LET,
-  AND_LET,
-  OR_LET,
-  FUNCTION_GLYPH,
-  FUNCTION_GLYPH_WITH_CONTEXT,
-  IDENTIFIER,
-  NUMERIC_LITERAL,
-  STRING_LITERAL,
-  REGEXP_LITERAL,
-  LINE_BREAK,
-  SET,
-  GET,
-  PARAMETER_REST,
-  ILLEGAL,
-  END_OF_INPUT
+class Token {
+  public:
+    enum class Type: int {
+      JS_ABSTRACT = 0,
+      JS_BOOLEAN,
+      JS_BREAK,
+      JS_BYTE,
+      JS_CASE,
+      JS_CATCH,
+      JS_CHAR,
+      JS_CLASS,
+      JS_CONST,
+      JS_CONTINUE,
+      JS_DEBUGGER,
+      JS_DEFAULT,
+      JS_DELETE,
+      JS_DO,
+      JS_DOUBLE,
+      JS_ELSE,
+      JS_ENUM,
+      JS_EXPORT,
+      JS_EXTENDS,
+      JS_FALSE,
+      JS_FINAL,
+      JS_FINALLY,
+      JS_FLOAT,
+      JS_FOR,
+      JS_FUNCTION,
+      JS_GOTO,
+      JS_IF,
+      JS_IMPLEMENTS,
+      JS_IMPORT,
+      JS_IN,
+      JS_INSTANCEOF,
+      JS_INT,
+      JS_INTERFACE,
+      JS_LET,
+      JS_LONG,
+      JS_MODULE,
+      JS_NAN,
+      JS_NATIVE,
+      JS_NEW,
+      JS_JS_NULL,
+      JS_PACKAGE,
+      JS_PRIVATE,
+      JS_PROTECTED,
+      JS_PUBLIC,
+      JS_RETURN,
+      JS_SHORT,
+      JS_STATIC,
+      JS_SUPER,
+      JS_SWITCH,
+      JS_SYNCHRONIZED,
+      JS_THIS,
+      JS_THROW,
+      JS_THROWS,
+      JS_TRANSIENT,
+      JS_TRUE,
+      JS_TRY,
+      JS_TYPEOF,
+      JS_VAR,
+      JS_VOID,
+      JS_VOLATILE,
+      JS_WHILE,
+      JS_WITH,
+      JS_EACH,
+      JS_YIELD,
+      JS_ASSERT,
+      JS_INCREMENT,
+      JS_DECREMENT,
+      JS_EQUAL,
+      JS_SHIFT_LEFT,
+      JS_SHIFT_RIGHT,
+      JS_LESS_EQUAL,
+      JS_GREATER_EQUAL,
+      JS_EQ,
+      JS_NOT_EQUAL,
+      JS_NOT_EQ,
+      JS_U_SHIFT_RIGHT,
+      JS_ADD_LET,
+      JS_SUB_LET,
+      JS_DIV_LET,
+      JS_MOD_LET,
+      JS_MUL_LET,
+      JS_LOGICAL_AND,
+      JS_LOGICAL_OR,
+      JS_SHIFT_LEFT_LET,
+      JS_SHIFT_RIGHT_LET,
+      JS_U_SHIFT_RIGHT_LET,
+      JS_NOT_LET,
+      JS_AND_LET,
+      JS_OR_LET,
+      JS_FUNCTION_GLYPH,
+      JS_IDENTIFIER,
+      JS_NUMERIC_LITERAL,
+      JS_STRING_LITERAL,
+      JS_REGEXP_LITERAL,
+      JS_LINE_BREAK,
+      JS_SET,
+      JS_GET,
+      JS_REST_PARAMETER,
+      END_OF_INPUT,
+      ILLEGAL
+    };
+  
+
+  INLINE static Token Illegal(size_t start_col,
+                              size_t end_col,
+                              size_t line_number,
+                              std::string&& message) {
+    return std::move(Token(Token::Type::ILLEGAL, start_col, end_col, line_number, std::move(message)));
+  }
+
+  Token(Token::Type token,
+               size_t start_col,
+               size_t end_col,
+               size_t line_number,
+               std::string&& value) :
+      Token(token, start_col, end_col, line_number) {
+    value_ = value;
+  }
+
+  Token(Token::Type token,
+               size_t start_col,
+               size_t end_col,
+               size_t line_number) :
+      type_(token),
+      start_col_(start_col_),
+      end_col_(end_col_),
+      line_number_(line_number) {
+  }
+
+  Token(Token&& token) :
+      value_(std::move(token.value_)),
+      type_(token.type_),
+      start_col_(token.start_col_),
+      end_col_(token.end_col_),
+      line_number_(token.line_number_) {
+  }
+
+  ~Token() = default;
+
+  INLINE const char* value() const {
+    return value_.c_str();
+  }
+
+  INLINE Token::Type type() const {
+    return type_;
+  }
+  
+  INLINE size_t start_col() const {
+    return start_col_;
+  }
+
+  INLINE size_t end_col() const {
+    return end_col_;
+  }
+
+  INLINE size_t line_number() const {
+    return line_number_;
+  }
+
+  private:
+    std::string value_;
+    Token::Type type_;
+    size_t start_col_;
+    size_t end_col_;
+    size_t line_number_;
+};
 }
-}
+#endif

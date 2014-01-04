@@ -22,12 +22,23 @@
  * THE SOFTWARE.
  */
 
+#ifndef PARSER_SOURCE_H_
+#define PARSER_SOURCE_H_
+
+#include <cstddef>
+
 namespace rasp {
 class Source {
- public :
-  Source(const char* source);
-  char Advance();
-  char Peek(int charCount);
-  void Back():
+  public:
+    Source(const char* source);
+    ~Source() = default;
+    char Advance();
+    char Peek(size_t char_count = 0) const;
+  private :
+    size_t source_size_;
+    size_t current_position_;
+    const char* source_;
+};
 }
-}
+
+#endif
