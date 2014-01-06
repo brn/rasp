@@ -22,28 +22,53 @@
  * THE SOFTWARE.
  */
 
-#ifndef PARSER_SOURCE_H_
-#define PARSER_SOURCE_H_
-
-#include <cstddef>
+#include <string>
 #include "../utils/inline.h"
+#include "../utils/os.h"
 
-namespace rasp {
-class Source {
- public:
-  typedef char Char;
-  Source(const char* source);
-  ~Source() = default;
-  char Advance();
-  char Peek(size_t char_count = 0) const;
-  INLINE size_t current_position() const {return current_position_;}
-  INLINE size_t line_number() const {return line_number_;}
- private :
-  size_t source_size_;
-  size_t current_position_;
-  size_t line_number_;
-  const char* source_;
+class UChar {
+ public:  
+  UChar(uint16_t c, const char* raw, size_t size):
+      byte_length_(size),
+      uchar_(c) {
+    ascii_ = size == 1;
+    Strcpy(raw_, raw, size);
+  };
+
+  
+  UChar()
+      : uchar_(0),
+        byte_length_(0),
+        ascii_(false){}
+  
+  
+  UChar(const UChar& uchar)
+      : uchar_(uchar.uchar_),
+        byte_length_(uchar.byte_length_),
+        ascii_(uchar.ascii_) {
+    Strcpy(raw_, uchar.raw_, uchar.byte_length_);
+  }
+  
+
+  ~UChar() = default;
+
+
+  INLINE const char* raw() const {return raw_.c_str();}
+
+
+  INLINE char ascii_char() const {return raw[0];}
+
+  
+  INLINE bool invalid() const {
+    return uchar_ == 0;
+  }
+
+
+  INLINE bool ascii() const {return ascii_;}
+
+ private:
+  size_t byte_length_;
+  bool ascii_;
+  uint16_t uchar_;
+  char[5] raw_;
 };
-}
-
-#endif

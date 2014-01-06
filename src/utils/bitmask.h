@@ -22,28 +22,16 @@
  * THE SOFTWARE.
  */
 
-#ifndef PARSER_SOURCE_H_
-#define PARSER_SOURCE_H_
+#ifndef UTILS_BITMAST_H_
+#define UTILS_BITMAST_H_
 
-#include <cstddef>
-#include "../utils/inline.h"
+#include <stdint.h>
 
-namespace rasp {
-class Source {
- public:
-  typedef char Char;
-  Source(const char* source);
-  ~Source() = default;
-  char Advance();
-  char Peek(size_t char_count = 0) const;
-  INLINE size_t current_position() const {return current_position_;}
-  INLINE size_t line_number() const {return line_number_;}
- private :
-  size_t source_size_;
-  size_t current_position_;
-  size_t line_number_;
-  const char* source_;
+template <int LowerBits, typename Type = uint32_t>
+class Bitmask {
+  static const Type full = ~(Type(0));
+  static const Type upper = ~((Type(1) << LowerBits) - 1);
+  static const Type lower = (Type(1) << LowerBits) - 1;
 };
-}
 
 #endif

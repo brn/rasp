@@ -5,5 +5,8 @@
 *.suo
 *.sln
 *.user
+Makefile
+gyp-mac-tool
+*.mk
 Debug
 Release

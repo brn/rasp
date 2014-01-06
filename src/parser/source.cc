@@ -27,8 +27,10 @@
 
 namespace rasp {
 Source::Source(const char* source) :
-    current_position_(0), source_(source) {
-  source_size_ = BYTELEN(source);
+    current_position_(0),
+    line_number_(1),
+    source_(source) {
+  source_size_ = STRLEN(source);
 }
 
 
@@ -37,8 +39,14 @@ Source::Source(const char* source) :
  * and advance the current source position.
  */
 char Source::Advance() {
+  if (current_position_ >= source_size_) {
+    return '\0';
+  }
   char next = source_[current_position_];
   current_position_++;
+  if (next == '\n') {
+    line_number_++;
+  }
   return next;
 }
 

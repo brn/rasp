@@ -22,28 +22,39 @@
  * THE SOFTWARE.
  */
 
-#ifndef PARSER_SOURCE_H_
-#define PARSER_SOURCE_H_
+#ifndef UTILS_OS_H_
+#define UTILS_OS_H_
 
-#include <cstddef>
-#include "../utils/inline.h"
+#include <errno.h>
+#include <string>
+
+#ifdef _WIN32
+#define K_ERRNO _doserrno
+#else
+#define K_ERRNO errno
+#endif
 
 namespace rasp {
-class Source {
- public:
-  typedef char Char;
-  Source(const char* source);
-  ~Source() = default;
-  char Advance();
-  char Peek(size_t char_count = 0) const;
-  INLINE size_t current_position() const {return current_position_;}
-  INLINE size_t line_number() const {return line_number_;}
- private :
-  size_t source_size_;
-  size_t current_position_;
-  size_t line_number_;
-  const char* source_;
-};
+void Strerror(std::string* buf, int err);
+void Printf(const char* format, ...);
+void SPrintf(std::string*, const char* format, ...);
+void VSPrintf(std::string* buf, const char* format, va_list args);
+void VFPrintf(FILE* fp, const char* format, ...);
+void FPrintf(FILE* fp, const char* format, ...);
+FILE* FOpen(const char* filename, const char* mode);
+void FClose(FILE* fp);
+void GetEnv(std::string *buf, const char* env);
+bool Sleep(int nano_time);
+int Utime(const char* path);
+time_t Time(time_t* time);
+int Asctime(std::string* buf, tm* tm);
+int LocalTime(tm* t, time_t* time);
+void OnExit(void(*callback)());
+void GetLastError(std::string* buf);
+FILE* POpen(const char* name, const char* mode);
+void PClose(FILE* fp);
+char* Strdup(const char* path);
+void Strcpy(char* dest, const char* src, size_t length);
 }
 
 #endif

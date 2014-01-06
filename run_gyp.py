@@ -57,9 +57,9 @@ if __name__ == '__main__':
     # Tell make to write its output into the same dir
     args.extend(['-Goutput_dir=' + build])
     # Create Makefiles, not XCode projects
-  if sys.platform != 'darwin':
+  if sys.platform != 'darwin' and sys.platform != 'win32':
     args.extend('-f make'.split())
-  else:
+  elif sys.platform == 'darwin':
     args.extend('-f xcode'.split())
 
   args.append('-Dtarget_arch=ia32')

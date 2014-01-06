@@ -37,14 +37,21 @@
       'include_dirs' : ['./lib'],
       'defines' : ['GTEST_HAS_RTTI=0', 'UNIT_TEST=1'],
       'sources': [
+        './src/utils/os.h',
+        './src/utils/os.cc',
         './src/parser/token.h',
+        './src/parser/token.cc',
         './src/parser/scanner.h',
         './src/parser/scanner.cc',
         './src/parser/source.h',
         './src/parser/source.cc',
         './lib/gtest/gtest.h',
         './lib/gtest/gtest-all.cc',
-        './test/parser/scanner-test.cc'
+        './test/parser/scanner-test-prelude.h',
+        './test/parser/scanner-keyword-scan-test.cc',
+        './test/parser/scanner-operator-scan-test.cc',
+        './test/parser/scanner-test.cc',
+        './test/test-main.cc',
       ],
       'xcode_settings': {
       },
