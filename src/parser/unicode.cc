@@ -22,33 +22,40 @@
  * THE SOFTWARE.
  */
 
-#include "../utils/bytelen.h";
+#include "./unicode.h"
+#include "../utils/bytelen.h"
 
 namespace rasp {
 Unicode::Unicode(const char* source)
     : current_position_(0),
       line_number_(1),
-      source_(source) {
+      source_(source),
+      piece_size_(0){
   source_size_ = BYTELEN(source_);
 }
 
 
 UChar Unicode::Next() {
-  size_t byte_count = GetUTF8ByteCount(Advance());
-  unit32_t next = ConvertUtf8ToUcs2(byte_count);
+  size_t byte_count = GetUTF8ByteCount(Peek(0));
+  uint32_t next = ConvertUtf8ToUcs2(byte_count);
   piece_[piece_size_] = '\0';
   piece_size_ = 0;
-  if (next != 0) {
-    return UChar(next, piece_, byte_count);
+  if (next > SURROGATE_MAX) {
+    printf("surrogate\n");
+    // surrogate pair only ch > 0xFFFF
+    // because NextUCS4FromUTF8 checks code point is valid
+    /**result++ = ToHighSurrogate(res);
+     *result++ = ToLowSurrogate(res);*/
+    return UChar();
+  } else if (next != 0) {
+    return UChar(static_cast<uint16_t>(next), piece_);
   }
   return UChar();
 }
 
 
 uint32_t Unicode::ConvertUtf8ToUcs2(size_t byte_count) {
-  switch (byte_count == 0) {
-    case 0:
-      return 0;
+  switch (byte_count) {
     case 1:
       return ConvertAscii();
     case 2:
@@ -76,15 +83,15 @@ uint8_t Unicode::Advance() {
 }
 
 
-uint32_t Convert2Byte() {
+uint32_t Unicode::Convert2Byte() {
   const uint8_t MINIMUN_RANGE = 0x00000080;
   char c = Peek();
   if (c != '\0') {
-    unit32_t next = Mast<5>(Append(Advance())) << 6;
+    uint32_t next = Mask<5>(Append(Advance())) << 6;
     c = Peek();
     if (c != '\0') {
       if (IsTrail(c)) {
-        next = next | Mast<6>(Append(Advance()));
+        next = next | Mask<6>(Append(Advance()));
         if (next > MINIMUN_RANGE) {
           return next;
         }
@@ -95,18 +102,24 @@ uint32_t Convert2Byte() {
 }
 
 
-unit32_t Convert3Byte() {
+uint32_t Unicode::Convert3Byte() {
   const int MINIMUN_RANGE = 0x00000800;
-  char c = Peek();
+  char c = Advance();
   if (c != '\0') {
-    unit32_t next = Mast<4>(Append(Advance())) << 12;
-    c = Peek();
+    uint32_t next = Mask<4>(Append(c)) << 12;
+    c = Advance();
     if (c != '\0') {
       if (IsTrail(c)) {
-        next = next | Mast<6>(Append(Advance()));
-        if (next > MINIMUN_RANGE) {
-          if (next > HIGE_SURROGATE_MIN || HIGE_SURROGATE_MAX < next) {
-            return next;
+        next = next | Mask<6>(Append(c)) << 6;
+        c = Advance();
+        if (c != '\0') {
+          if (IsTrail(c)) {
+            next = next | Mask<6>(Append(c));
+            if (next > MINIMUN_RANGE) {
+              if (next < HIGH_SURROGATE_MIN || LOW_SURROGATE_MAX < next) {
+                return next;
+              }
+            }
           }
         }
       }
@@ -116,15 +129,15 @@ unit32_t Convert3Byte() {
 }
 
 
-uint32_t Convert4Byte() {
+uint32_t Unicode::Convert4Byte() {
   const int MINIMUN_RANGE = 0x000010000;
   char c = Peek();
   if (c != '\0') {
-    unit32_t next = Mast<3>(Append(Advance())) << 18;
+    uint32_t next = Mask<3>(Append(Advance())) << 18;
     c = Peek();
     if (c != '\0') {
       if (IsTrail(c)) {
-        next = next | Mast<6>(Append(Advance())) << 12;
+        next = next | Mask<6>(Append(Advance())) << 12;
         c = Peek();
         if (c != '\0') {
           if (IsTrail(c)) {
@@ -147,4 +160,9 @@ uint32_t Convert4Byte() {
   }
   return 0;
 }
+
+
+const size_t Unicode::LENGTH_ARRAY[16] = {
+  0,0,0,0,0,0,0,0,0,0,0,0,2,0,3,4
+};
 }

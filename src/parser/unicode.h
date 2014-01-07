@@ -25,31 +25,38 @@
 #ifndef PARSER_UNICODE_H_
 #define PARSER_UNICODE_H_
 
+#include <array>
 #include <stdint.h>
-#include "../utils/inline.h";
-#include "../utils/bitmask.h";
+#include "../utils/inline.h"
+#include "../utils/bitmask.h"
+#include "./uchar.h"
 
 namespace rasp {
 class Unicode {
  public:
   Unicode(const char* source);
 
+  Unicode(const Unicode& un) = delete;
+
+  Unicode(Unicode&& un) = delete;
+
+  ~Unicode() = default;
   
   UChar Next();
 
   
-  bool HasMore() const;
+  INLINE bool HasMore() const {return Peek() != '\0';}
 
   
-  INLINE line_number() const {return line_number_;}
+  INLINE uint32_t line_number() const {return line_number_;}
 
   
-  INLINE current_position() const {return current_position_;}
+  INLINE uint32_t current_position() const {return current_position_;}
   
  private:
 
   
-  uint32_t ConvertUtf8ToUcs2();
+  uint32_t ConvertUtf8ToUcs2(size_t byte_count);
 
 
   uint8_t Advance();
@@ -58,24 +65,40 @@ class Unicode {
   /**
    * Lookahead source content with specified position.
    */
-  INLINE uint8_t Peek() const {
+  INLINE uint8_t Peek(int char_position = 1) const {
     size_t next_position = current_position_ + char_position;
     if (next_position >= source_size_) {
       return '\0';
     }
     return static_cast<uint8_t>(source_[next_position]);
   }
+
+  
+  template<std::size_t N, typename CharT>
+  INLINE CharT Mask(CharT ch) {
+    return Bitmask<N, uint32_t>::lower & ch;
+  }
   
   
-  INLINE size_t GetUTF8ByteCount(char first_byte) const {
-    if (first_byte == '\0') return 0;
-    if (first_byte < ASCII_RANGE) return 1;
-    return LENGTH_ARRAY[(first_byte >> 4) | 0xF)];
+  INLINE size_t GetUTF8ByteCount(uint8_t first_byte) const {
+    static const std::array<uint8_t, UINT8_MAX + 1> kLengthMap = { {
+        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  // 00000000 -> 00011111
+        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  // 00100000 -> 00111111
+        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  // 01000000 -> 01011111
+        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  // 01100000 -> 01111111  ASCII range end
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  // 10000000 -> 10011111  invalid
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  // 10100000 -> 10111111  invalid
+        2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,  // 11000000 -> 11011111  2 bytes range
+        3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,                                  // 11100000 -> 11101111  3 bytes range
+        4,4,4,4,4,4,4,4,                                                  // 11110000 -> 11110111  4 bytes range
+        0,0,0,0,0,0,0,0                                                   // 11111000 -> 11111111  invalid
+      } };
+    return kLengthMap[first_byte];
   }
 
   
   INLINE uint32_t ConvertAscii() {
-    return Mask<8>(Advance());
+    return Mask<8>(Append(Advance()));
   }
 
   
@@ -108,7 +131,13 @@ class Unicode {
   static const uint32_t LOW_SURROGATE_MIN = 0xDC00;
 
 
+  static const uint32_t LOW_SURROGATE_MAX = 0xDFFF;
+
+
   static const uint32_t LOW_SURROGATE_MASK = (1 << SURROGATE_BITS) - 1;
+
+
+  static const uint32_t SURROGATE_MAX = 0xFFFF;
   
   
   INLINE uint16_t ToHighSurrogate(uint32_t uc) {
@@ -127,18 +156,16 @@ class Unicode {
     return c;
   }
   
-  const unit8_t ASCII_RANGE = 0x6;
+  const uint8_t ASCII_RANGE = 0x7F;
   
   uint32_t source_size_;
   uint32_t current_position_;
   uint32_t line_number_;
   uint8_t piece_size_;
   const char* source_;
-  char[5] piece_;
+  char piece_[5];
 
-  static const size_t LENGTH_ARRAY[16] = {
-    0,0,0,0,0,0,0,0,0,0,0,2,0,3,4,0
-  }
+  static const size_t LENGTH_ARRAY[16];
 };
 }
 

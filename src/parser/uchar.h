@@ -22,17 +22,22 @@
  * THE SOFTWARE.
  */
 
+#ifndef PARSER_UCHAR_H_
+#define PARSER_UCHAR_H_
+
 #include <string>
 #include "../utils/inline.h"
+#include "../utils/bytelen.h"
 #include "../utils/os.h"
 
+namespace rasp {
 class UChar {
  public:  
-  UChar(uint16_t c, const char* raw, size_t size):
-      byte_length_(size),
+  UChar(uint16_t c, const char* raw):
+      byte_length_(STRLEN(raw)),
       uchar_(c) {
-    ascii_ = size == 1;
-    Strcpy(raw_, raw, size);
+    ascii_ = byte_length_ == 1;
+    strcpy(raw_, raw);
   };
 
   
@@ -46,17 +51,17 @@ class UChar {
       : uchar_(uchar.uchar_),
         byte_length_(uchar.byte_length_),
         ascii_(uchar.ascii_) {
-    Strcpy(raw_, uchar.raw_, uchar.byte_length_);
+    strcpy(raw_, uchar.raw_);
   }
   
 
   ~UChar() = default;
 
 
-  INLINE const char* raw() const {return raw_.c_str();}
+  INLINE const char* raw() const {return raw_;}
 
 
-  INLINE char ascii_char() const {return raw[0];}
+  INLINE char ascii_char() const {return raw_[0];}
 
   
   INLINE bool invalid() const {
@@ -66,9 +71,16 @@ class UChar {
 
   INLINE bool ascii() const {return ascii_;}
 
+
+  INLINE uint32_t uchar() const {return uchar_;}
+
  private:
   size_t byte_length_;
   bool ascii_;
   uint16_t uchar_;
-  char[5] raw_;
+  char raw_[5];
 };
+}
+
+
+#endif

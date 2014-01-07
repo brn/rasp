@@ -27,11 +27,14 @@
 
 #include <stdint.h>
 
+
+namespace rasp {
 template <int LowerBits, typename Type = uint32_t>
 class Bitmask {
+ public:
   static const Type full = ~(Type(0));
   static const Type upper = ~((Type(1) << LowerBits) - 1);
   static const Type lower = (Type(1) << LowerBits) - 1;
 };
-
+}
 #endif

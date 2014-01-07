@@ -56,5 +56,25 @@
       'xcode_settings': {
       },
     },
+    {
+      'target_name': 'unicode_test',
+      'product_name': 'UnicodeTest',
+      'type': 'executable',
+      'include_dirs' : ['./lib'],
+      'defines' : ['GTEST_HAS_RTTI=0', 'UNIT_TEST=1'],
+      'sources': [
+        './src/utils/os.h',
+        './src/utils/os.cc',
+        './src/parser/unicode.h',
+        './src/parser/unicode.cc',
+        './src/parser/uchar.h',
+        './lib/gtest/gtest.h',
+        './lib/gtest/gtest-all.cc',
+        './test/parser/unicode-test.cc',
+        './test/test-main.cc',
+      ],
+      'xcode_settings': {
+      },
+    },
   ] # targets
 }
