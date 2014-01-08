@@ -37,8 +37,8 @@
 namespace rasp {
 void Strerror(std::string* buf, int err);
 void Printf(const char* format, ...);
-void SPrintf(std::string*, const char* format, ...);
-void VSPrintf(std::string* buf, const char* format, va_list args);
+void SPrintf(std::string& buf, bool append, const char* format, ...);
+void VSPrintf(std::string& buf, bool append, const char* format, va_list args);
 void VFPrintf(FILE* fp, const char* format, ...);
 void FPrintf(FILE* fp, const char* format, ...);
 FILE* FOpen(const char* filename, const char* mode);

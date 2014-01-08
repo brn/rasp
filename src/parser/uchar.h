@@ -32,36 +32,26 @@
 
 namespace rasp {
 class UChar {
- public:  
-  UChar(uint16_t c, const char* raw):
-      byte_length_(STRLEN(raw)),
-      uchar_(c) {
-    ascii_ = byte_length_ == 1;
-    strcpy(raw_, raw);
-  };
+ public:
+  UChar(uint16_t c, bool ascii):
+      uchar_(c),
+      ascii_(ascii){};
 
   
   UChar()
       : uchar_(0),
-        byte_length_(0),
         ascii_(false){}
   
   
   UChar(const UChar& uchar)
       : uchar_(uchar.uchar_),
-        byte_length_(uchar.byte_length_),
-        ascii_(uchar.ascii_) {
-    strcpy(raw_, uchar.raw_);
-  }
+        ascii_(uchar.ascii_) {}
   
 
   ~UChar() = default;
 
 
-  INLINE const char* raw() const {return raw_;}
-
-
-  INLINE char ascii_char() const {return raw_[0];}
+  INLINE char ascii_char() const {return static_cast<char>(uchar_);}
 
   
   INLINE bool invalid() const {
@@ -75,10 +65,8 @@ class UChar {
   INLINE uint32_t uchar() const {return uchar_;}
 
  private:
-  size_t byte_length_;
   bool ascii_;
   uint16_t uchar_;
-  char raw_[5];
 };
 }
 

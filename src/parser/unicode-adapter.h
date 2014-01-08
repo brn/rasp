@@ -27,50 +27,116 @@
 
 #include <array>
 #include <stdint.h>
+#include <iterator>
+#include <utility>
 #include "../utils/inline.h"
 #include "../utils/bitmask.h"
 #include "./uchar.h"
 
 namespace rasp {
-class Unicode {
+template <typename InputIterator>
+class UnicodeAdapter : public std::iterator<std::forward_iterator_tag, UChar> {
+  static const uint8_t ASCII_RANGE = 0x7F;
+
+  
+  static const uint32_t SURROGATE_BITS = 10;
+
+  
+  static const uint32_t HIGH_SURROGATE_MIN = 0xD800;
+
+  
+  static const uint32_t HIGH_SURROGATE_MAX = 0xDBFF;
+
+  
+  static const uint32_t HIGH_SURROGATE_OFFSET = HIGH_SURROGATE_MIN - (0x10000 >> 10);
+
+  
+  static const uint32_t LOW_SURROGATE_MIN = 0xDC00;
+
+
+  static const uint32_t LOW_SURROGATE_MAX = 0xDFFF;
+
+
+  static const uint32_t LOW_SURROGATE_MASK = (1 << SURROGATE_BITS) - 1;
+
+
+  static const uint32_t SURROGATE_MAX = 0xFFFF;
+
+  
  public:
-  Unicode(const char* source);
-
-  Unicode(const Unicode& un) = delete;
-
-  Unicode(Unicode&& un) = delete;
-
-  ~Unicode() = default;
   
-  UChar Next();
+  
+  UnicodeAdapter(InputIterator begin);
 
   
-  INLINE bool HasMore() const {return Peek() != '\0';}
+  template <typename T>
+  UnicodeAdapter(const UnicodeAdapter<T>& un);
 
+
+  template <typename T>
+  UnicodeAdapter(UnicodeAdapter<T>&& un);
+
+  
+  ~UnicodeAdapter() = default;
+
+
+  INLINE UnicodeAdapter& operator = (InputIterator iter) {begin_ = iter;}
+  
+
+  INLINE bool operator == (const InputIterator& iter){return begin_ == iter;}
+
+  
+  INLINE bool operator != (const InputIterator& iter){return begin_ != iter;}
+
+  
+  INLINE UChar operator* () {return Next();}
+
+
+  INLINE UnicodeAdapter& operator ++() {Advance();return *this;}
+
+
+  INLINE UnicodeAdapter& operator +=(int c) {
+    while (c--) Advance();
+    return *this;
+  }
+
+
+  INLINE const UnicodeAdapter operator + (int c) {
+    UnicodeAdapter ua(*this);
+    while (c--) ++ua;
+    return ua;
+  }
+  
   
   INLINE uint32_t line_number() const {return line_number_;}
 
   
   INLINE uint32_t current_position() const {return current_position_;}
+
+  
+  INLINE const InputIterator& base() const {return begin_;}
+
   
  private:
+
+  UChar Next();
 
   
   uint32_t ConvertUtf8ToUcs2(size_t byte_count);
 
 
-  uint8_t Advance();
-  
-  
-  /**
-   * Lookahead source content with specified position.
-   */
-  INLINE uint8_t Peek(int char_position = 1) const {
-    size_t next_position = current_position_ + char_position;
-    if (next_position >= source_size_) {
-      return '\0';
+  INLINE void UnicodeAdapter::Advance() {
+    uint8_t next = *begin_;
+    size_t byte_count = GetUTF8ByteCount(next);
+    if (next == '\n') {
+      current_position_ = 1;
+      line_number_++;
     }
-    return static_cast<uint8_t>(source_[next_position]);
+    current_position_ += byte_count;
+    std::advance(begin_, byte_count);
+    if (surrogate_) {
+      current_position_ += 1;
+    }
   }
 
   
@@ -98,7 +164,7 @@ class Unicode {
 
   
   INLINE uint32_t ConvertAscii() {
-    return Mask<8>(Append(Advance()));
+    return Mask<8>(*begin_);
   }
 
   
@@ -114,30 +180,6 @@ class Unicode {
 
   
   uint32_t Convert4Byte();
-
-  
-  static const uint32_t SURROGATE_BITS = 10;
-
-  
-  static const uint32_t HIGH_SURROGATE_MIN = 0xD800;
-
-  
-  static const uint32_t HIGH_SURROGATE_MAX = 0xDBFF;
-
-  
-  static const uint32_t HIGH_SURROGATE_OFFSET = HIGH_SURROGATE_MIN - (0x10000 >> 10);
-
-  
-  static const uint32_t LOW_SURROGATE_MIN = 0xDC00;
-
-
-  static const uint32_t LOW_SURROGATE_MAX = 0xDFFF;
-
-
-  static const uint32_t LOW_SURROGATE_MASK = (1 << SURROGATE_BITS) - 1;
-
-
-  static const uint32_t SURROGATE_MAX = 0xFFFF;
   
   
   INLINE uint16_t ToHighSurrogate(uint32_t uc) {
@@ -148,25 +190,15 @@ class Unicode {
   INLINE uint16_t ToLowSurrogate(uint32_t uc) {
     return static_cast<uint16_t>((uc & LOW_SURROGATE_MASK) + LOW_SURROGATE_MIN);
   }
-
-
-  INLINE char Append(char c) {
-    piece_[piece_size_] = c;
-    piece_size_++;
-    return c;
-  }
   
-  const uint8_t ASCII_RANGE = 0x7F;
-  
-  uint32_t source_size_;
   uint32_t current_position_;
   uint32_t line_number_;
-  uint8_t piece_size_;
-  const char* source_;
-  char piece_[5];
-
+  InputIterator begin_;
+  uint32_t surrogate_;
   static const size_t LENGTH_ARRAY[16];
 };
 }
+
+#include "./unicode-adapter-inl.h"
 
 #endif

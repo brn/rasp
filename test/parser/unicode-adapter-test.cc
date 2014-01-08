@@ -28,7 +28,7 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
-#include "../../src/parser/unicode.h"
+#include "../../src/parser/unicode-adapter.h"
 #include "../../src/parser/uchar.h"
 
 
@@ -48,15 +48,50 @@ inline std::string ReadFile(const char* filename) {
 }
 
 
-TEST(Unicode, Unicode_parse_test) {
-  std::string source = ReadFile("test/parser/unicode-test-cases/test1.txt");
-  rasp::Unicode un(source.c_str());
-  std::vector<rasp::UChar> uchar_vector;
-  while (un.HasMore()) {
-    rasp::UChar uc = un.Next();
-    ASSERT_TRUE(!uc.invalid());
-    uchar_vector.push_back(uc);
-    printf("%#018x\n", uc.uchar());
+::testing::AssertionResult CompareUchar(const std::string& value, const std::string expected, int i) {
+  char a = value.at(i);
+  char b = expected.at(i);
+  if (a == b) {
+    return ::testing::AssertionSuccess();
   }
-  printf("%d\n", uchar_vector.size());
+  return ::testing::AssertionFailure()
+      << "The value of index " << i << " expected " << b << " but got " << a
+      << "\nvalue:    " << value.substr(0, i) << '\n'
+      << "           " << std::string(i - 2, '-') << "^"
+      << "\nexpected: " << expected.substr(0, i) << '\n'
+      << "           " << std::string(i - 2, '-') << "^"
+      << '\n';
+}
+
+
+::testing::AssertionResult IsValid(const rasp::UChar& uchar, const rasp::UnicodeAdapter<std::string::iterator>& un) {
+  if (!uchar.invalid()) {
+    return ::testing::AssertionSuccess();
+  }
+  return ::testing::AssertionFailure() << "Invalid unicode charactor. at: " << un.current_position();
+}
+
+
+TEST(UnicodeAdapter, UnicodeAdapter_parse_test) {
+  std::string source = ReadFile("test/parser/unicode-test-cases/valid-utf8.txt");
+  std::string result = ReadFile("test/parser/unicode-test-cases/valid-utf8.result.txt");
+  std::string buffer;
+  std::vector<rasp::UChar> uchar_vector;
+  auto end = source.end();
+  rasp::UnicodeAdapter<std::string::iterator> un(source.begin());
+  for (;un != end; std::advance(un, 1)) {
+    const rasp::UChar uc = *un;
+    ASSERT_TRUE(IsValid(uc, un));
+    if (uc.ascii()) {
+      buffer.append(1, uc.ascii_char());
+    } else {
+      rasp::SPrintf(buffer, true, "%#019x", uc.uchar());
+    }
+    uchar_vector.push_back(uc);
+  }
+  ASSERT_EQ(uchar_vector.size(), 146);
+  for (int i = 0, len = buffer.size(); i < len; i++) {
+    ASSERT_TRUE(CompareUchar(buffer, result, i));
+    i++;
+  }
 }

@@ -54,24 +54,32 @@ void Printf(const char* format, ...) {
   va_end(args);
 }
 
-void SPrintf(std::string* buf, const char* format, ...) {
+void SPrintf(std::string& buf, bool append, const char* format, ...) {
   va_list args;
   va_start(args, format);
   int len = VAArgs(format, args);
   char* buffer = static_cast<char*>(malloc(len * sizeof(char)));
   assert(buffer != NULL);
   vsprintf_s(buffer, len, format, args);
-  buf->assign(buffer);
+  if (!append) {
+    buf.assign(buffer);
+  } else {
+    buf.append(buffer);
+  }
   free(buffer);
   va_end(args);
 }
 
-void VSPrintf(std::string* buf, const char* format, va_list args) {
+void VSPrintf(std::string& buf, bool append, const char* format, va_list args) {
   int len = VAArgs(format, args);
   char* buffer = static_cast<char*>(malloc(len * sizeof(char)));
   assert(buffer != NULL);
   vsprintf_s(buffer, len, format, args);
-  buf->assign(buffer);
+  if (!append) {
+    buf.assign(buffer);
+  } else {
+    buf.append(buffer);
+  }
   free(buffer);
 }
 
@@ -177,19 +185,27 @@ void Printf(const char* format, ...) {
   va_end(args);
 }
 
-void SPrintf(std::string* buffer, const char* format, ...) {
+void SPrintf(std::string& buffer, bool append, const char* format, ...) {
   va_list args;
   va_start(args, format);
   char* buf = NULL;
   vasprintf(&buf, format, args);
-  buffer->assign(buf);
+  if (!append) {
+    buffer.assign(buf);
+  } else {
+    buffer.append(buf);
+  }
   free(buf);
 }
 
-void VSPrintf(std::string* buffer, const char* format, va_list args) {
+void VSPrintf(std::string& buffer, bool append, const char* format, va_list args) {
   char* buf = NULL;
   vasprintf(&buf, format, args);
-  buffer->assign(buf);
+  if (!append) {
+    buffer.assign(buf);
+  } else {
+    buffer.append(buf);
+  }
   free(buf);
 }
 
