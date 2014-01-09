@@ -22,74 +22,24 @@
  * THE SOFTWARE.
  */
 
-#ifndef PARSER_UCHAR_H_
-#define PARSER_UCHAR_H_
-
-#include <string>
-#include "../utils/inline.h"
-#include "../utils/bytelen.h"
-#include "../utils/os.h"
-#include "../utils/unicode.h"
+#ifndef UTILS_CLASS_TRAIT_H_
+#define UTILS_CLASS_TRAIT_H_
 
 namespace rasp {
-class UChar {
- public:
-  INLINE explicit UChar(UC32 c): uchar_(c) {};
+class Static {
+  Static() = delete;
+  Static(const Static&) = delete;
+  Static(Static&&) = delete;
+  Static& operator = (const Static&) = delete;
+};
 
-  
-  INLINE UChar(): uchar_(0) {}
-  
-  
-  INLINE UChar(const UChar& uchar): uchar_(uchar.uchar_) {}
-  
-
-  ~UChar() = default;
-
-  INLINE operator UC32 () const {return uchar_;}
-
-
-  INLINE char ascii() const {return static_cast<char>(uchar_);}
-
-
-  INLINE bool IsSurrogatePair() const {
-    return Utf16::IsSurrogatePair(uchar_);
-  }
-
-
-  INLINE bool IsHighSurrogate() const {
-    return Utf16::IsHighSurrogate(uchar_);
-  }
-
-
-  INLINE bool IsLowSurrogate() const {
-    return Utf16::IsLowSurrogate(uchar_);
-  }
-  
-
-  INLINE UC16 high_surrogate() {
-    return Utf16::ToHighSurrogate(uchar_);
-  }
-
-
-  INLINE UC16 low_surrogate() {
-    return Utf16::ToLowSurrogate(uchar_);
-  }
-  
-  
-  INLINE bool IsInvalid() const {
-    return uchar_ == 0;
-  }
-
-
-  INLINE bool IsAscii() const {return Utf8::IsAscii(uchar_);}
-
-
-  INLINE UC16 uchar() const {return static_cast<UC16>(uchar_);}
-
- private:
-  UC32 uchar_;
+class Uncopyable {
+public:
+  Uncopyable() = default;
+  ~Uncopyable() = default;
+  Uncopyable(const Uncopyable&) = delete;
+  Uncopyable& operator = (const Uncopyable&) = delete;
 };
 }
-
 
 #endif

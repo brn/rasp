@@ -28,7 +28,7 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
-#include "../../src/parser/unicode-adapter.h"
+#include "../../src/parser/unicode-iterator-adapter.h"
 #include "../../src/parser/uchar.h"
 
 
@@ -64,34 +64,48 @@ inline std::string ReadFile(const char* filename) {
 }
 
 
-::testing::AssertionResult IsValid(const rasp::UChar& uchar, const rasp::UnicodeAdapter<std::string::iterator>& un) {
-  if (!uchar.invalid()) {
+::testing::AssertionResult IsValid(const rasp::UChar& uchar, const rasp::UnicodeIteratorAdapter<16, std::string::iterator>& un) {
+  if (!uchar.IsInvalid()) {
     return ::testing::AssertionSuccess();
   }
   return ::testing::AssertionFailure() << "Invalid unicode charactor. at: " << un.current_position();
 }
 
 
-TEST(UnicodeAdapter, UnicodeAdapter_parse_test) {
+::testing::AssertionResult IsSurrogatePair(const rasp::UChar& uchar, const rasp::UnicodeIteratorAdapter<16, std::string::iterator>& un) {
+  if (uchar.IsSurrogatePair()) {
+    return ::testing::AssertionSuccess();
+  }
+  return ::testing::AssertionFailure() << "Invalid unicode charactor. at: " << un.current_position();
+}
+
+
+void CompareBuffer(const std::string& buffer, const std::string& expectation) {
+  for (int i = 0, len = buffer.size(); i < len; i++) {
+    ASSERT_TRUE(CompareUchar(buffer, expectation, i));
+    i++;
+  }
+}
+
+
+TEST(UnicodeIteratorAdapter16, parse_valid_utf8_code_test) {
   std::string source = ReadFile("test/parser/unicode-test-cases/valid-utf8.txt");
   std::string result = ReadFile("test/parser/unicode-test-cases/valid-utf8.result.txt");
   std::string buffer;
   std::vector<rasp::UChar> uchar_vector;
   auto end = source.end();
-  rasp::UnicodeAdapter<std::string::iterator> un(source.begin());
+  rasp::UnicodeIteratorAdapter<16, std::string::iterator> un(source.begin());
   for (;un != end; std::advance(un, 1)) {
     const rasp::UChar uc = *un;
     ASSERT_TRUE(IsValid(uc, un));
-    if (uc.ascii()) {
-      buffer.append(1, uc.ascii_char());
+    ASSERT_FALSE(IsSurrogatePair(uc, un));
+    if (uc.IsAscii()) {
+      buffer.append(1, uc.ascii());
     } else {
       rasp::SPrintf(buffer, true, "%#019x", uc.uchar());
     }
     uchar_vector.push_back(uc);
   }
   ASSERT_EQ(uchar_vector.size(), 146);
-  for (int i = 0, len = buffer.size(); i < len; i++) {
-    ASSERT_TRUE(CompareUchar(buffer, result, i));
-    i++;
-  }
+  CompareBuffer(buffer, result);
 }
