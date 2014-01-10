@@ -34,13 +34,16 @@
 namespace rasp {
 class UChar {
  public:
-  INLINE explicit UChar(UC32 c): uchar_(c) {};
+  INLINE explicit UChar(UC32 c, const UC8Bytes& utf8):
+      uchar_(c),
+      utf8_(utf8){};
 
   
   INLINE UChar(): uchar_(0) {}
   
   
-  INLINE UChar(const UChar& uchar): uchar_(uchar.uchar_) {}
+  INLINE UChar(const UChar& uchar):
+      uchar_(uchar.uchar_), utf8_(uchar.utf8_) {}
   
 
   ~UChar() = default;
@@ -54,24 +57,14 @@ class UChar {
   INLINE bool IsSurrogatePair() const {
     return Utf16::IsSurrogatePair(uchar_);
   }
-
-
-  INLINE bool IsHighSurrogate() const {
-    return Utf16::IsHighSurrogate(uchar_);
-  }
-
-
-  INLINE bool IsLowSurrogate() const {
-    return Utf16::IsLowSurrogate(uchar_);
-  }
   
 
-  INLINE UC16 high_surrogate() {
+  INLINE UC16 high_surrogate() const {
     return Utf16::ToHighSurrogate(uchar_);
   }
 
 
-  INLINE UC16 low_surrogate() {
+  INLINE UC16 low_surrogate() const {
     return Utf16::ToLowSurrogate(uchar_);
   }
   
@@ -86,8 +79,13 @@ class UChar {
 
   INLINE UC16 uchar() const {return static_cast<UC16>(uchar_);}
 
+
+  INLINE const char* utf8() const {return utf8_.data();}
+
  private:
+  
   UC32 uchar_;
+  UC8Bytes utf8_;
 };
 }
 

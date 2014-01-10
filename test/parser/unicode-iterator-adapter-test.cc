@@ -64,19 +64,30 @@ inline std::string ReadFile(const char* filename) {
 }
 
 
-::testing::AssertionResult IsValid(const rasp::UChar& uchar, const rasp::UnicodeIteratorAdapter<16, std::string::iterator>& un) {
+::testing::AssertionResult IsValid(const rasp::UChar& uchar, const rasp::UnicodeIteratorAdapter<std::string::iterator>& un) {
   if (!uchar.IsInvalid()) {
     return ::testing::AssertionSuccess();
   }
-  return ::testing::AssertionFailure() << "Invalid unicode charactor. at: " << un.current_position();
+  return ::testing::AssertionFailure() << "Invalid unicode charactor. at: " << un.current_position()
+                                       << " value: " + uchar.uchar();
 }
 
 
-::testing::AssertionResult IsSurrogatePair(const rasp::UChar& uchar, const rasp::UnicodeIteratorAdapter<16, std::string::iterator>& un) {
+::testing::AssertionResult IsSurrogatePair(const rasp::UChar& uchar, const rasp::UnicodeIteratorAdapter<std::string::iterator>& un) {
   if (uchar.IsSurrogatePair()) {
     return ::testing::AssertionSuccess();
   }
-  return ::testing::AssertionFailure() << "Invalid unicode charactor. at: " << un.current_position();
+  return ::testing::AssertionFailure() << "Invalid unicode charactor. at: " << un.current_position()
+                                       << " value: " << uchar.uchar();
+}
+
+
+::testing::AssertionResult IsNotSurrogatePair(const rasp::UChar& uchar, const rasp::UnicodeIteratorAdapter<std::string::iterator>& un) {
+  if (uchar.IsSurrogatePair()) {
+    return ::testing::AssertionFailure() << "Invalid unicode charactor. at: " << un.current_position()
+                                         << " value: " << uchar.uchar();
+  }
+  return ::testing::AssertionSuccess();
 }
 
 
@@ -88,24 +99,55 @@ void CompareBuffer(const std::string& buffer, const std::string& expectation) {
 }
 
 
-TEST(UnicodeIteratorAdapter16, parse_valid_utf8_code_test) {
-  std::string source = ReadFile("test/parser/unicode-test-cases/valid-utf8.txt");
-  std::string result = ReadFile("test/parser/unicode-test-cases/valid-utf8.result.txt");
+inline void UnicodeTest(const char* input, const char* expected, int surrogate_begin, size_t expected_size) {
+  std::string source = ReadFile(input);
+  std::string result = ReadFile(expected);
   std::string buffer;
-  std::vector<rasp::UChar> uchar_vector;
+  std::string utf8_buffer;
+  static const char* kFormat = "%#019x";
   auto end = source.end();
-  rasp::UnicodeIteratorAdapter<16, std::string::iterator> un(source.begin());
+  rasp::UnicodeIteratorAdapter<std::string::iterator> un(source.begin());
+  int index = 0;
+  int size = 0;
   for (;un != end; std::advance(un, 1)) {
     const rasp::UChar uc = *un;
     ASSERT_TRUE(IsValid(uc, un));
-    ASSERT_FALSE(IsSurrogatePair(uc, un));
+    if (surrogate_begin == -1 || surrogate_begin > index) {
+      ASSERT_TRUE(IsNotSurrogatePair(uc, un));
+    } else {
+      ASSERT_TRUE(IsSurrogatePair(uc, un));
+    }
+    index++;
     if (uc.IsAscii()) {
       buffer.append(1, uc.ascii());
     } else {
-      rasp::SPrintf(buffer, true, "%#019x", uc.uchar());
+      if (!uc.IsSurrogatePair()) {
+        rasp::SPrintf(buffer, true, kFormat, uc.uchar());
+      } else {
+        rasp::SPrintf(buffer, true, kFormat, uc.high_surrogate());
+        rasp::SPrintf(buffer, true, kFormat, uc.low_surrogate());
+      }
     }
-    uchar_vector.push_back(uc);
+    utf8_buffer.append(uc.utf8());
+    size += uc.IsSurrogatePair()? 2: 1;
   }
-  ASSERT_EQ(uchar_vector.size(), 146);
+  ASSERT_EQ(expected_size, size);
   CompareBuffer(buffer, result);
+  CompareBuffer(utf8_buffer, source);
+}
+
+
+TEST(UnicodeIteratorAdapter, parse_valid_utf8_code_test) {
+  UnicodeTest("test/parser/unicode-test-cases/valid-utf8.txt",
+              "test/parser/unicode-test-cases/valid-utf8.result.txt",
+              -1,
+              146);
+}
+
+
+TEST(UnicodeIteratorAdapter, parse_valid_utf8_surrogate_pair_code_test) {
+  UnicodeTest("test/parser/unicode-test-cases/valid-utf8-surrogate-pair.txt",
+              "test/parser/unicode-test-cases/valid-utf8-surrogate-pair.result.txt",
+              68,
+              674);
 }

@@ -22,12 +22,12 @@
  * THE SOFTWARE.
  */
 
-#ifndef PARSER_UNICODE_INL_H_
-#define PARSER_UNICODE_INL_H_
+#ifndef PARSER_UNICODE_ITERATOR_ADAPTER_INL_H_
+#define PARSER_UNICODE_ITERATOR_ADAPTER_INL_H_
 
 namespace rasp {
 template <typename InputIterator>
-UnicodeIteratorAdapter<16, InputIterator>::UnicodeIteratorAdapter(InputIterator begin)
+UnicodeIteratorAdapter<InputIterator>::UnicodeIteratorAdapter(InputIterator begin)
     : current_position_(0),
       line_number_(1),
       begin_(begin) {}
@@ -35,7 +35,7 @@ UnicodeIteratorAdapter<16, InputIterator>::UnicodeIteratorAdapter(InputIterator 
 
 template <typename InputIterator>
 template <typename T>
-UnicodeIteratorAdapter<16, InputIterator>::UnicodeIteratorAdapter(const UnicodeIteratorAdapter<16, T>& it)
+UnicodeIteratorAdapter<InputIterator>::UnicodeIteratorAdapter(const UnicodeIteratorAdapter<T>& it)
     : current_position_(it.current_position_),
       line_number_(it.line_number_),
       begin_(it.begin_) {}
@@ -43,34 +43,35 @@ UnicodeIteratorAdapter<16, InputIterator>::UnicodeIteratorAdapter(const UnicodeI
 
 template <typename InputIterator>
 template <typename T>
-UnicodeIteratorAdapter<16, InputIterator>::UnicodeIteratorAdapter(UnicodeIteratorAdapter<16, T>&& it)
+UnicodeIteratorAdapter<InputIterator>::UnicodeIteratorAdapter(UnicodeIteratorAdapter<T>&& it)
     : current_position_(it.current_position_),
       line_number_(it.line_number_),
       begin_(std::move(it.begin_)) {}
 
 
 template <typename InputIterator>
-UChar UnicodeIteratorAdapter<16, InputIterator>::Next () const {
+UChar UnicodeIteratorAdapter<InputIterator>::Next () const {
+  UC8Bytes utf8;
   size_t byte_count = Utf8::GetByteCount(*begin_);
-  uint32_t next = ConvertUtf8ToUcs2(byte_count);
+  uint32_t next = ConvertUtf8ToUcs2(byte_count, &utf8);
   if (next != 0) {
-    return UChar(next);
+    return UChar(next, utf8);
   }
   return UChar();
 }
 
 
 template <typename InputIterator>
-uint32_t UnicodeIteratorAdapter<16, InputIterator>::ConvertUtf8ToUcs2(size_t byte_count) const {
+uint32_t UnicodeIteratorAdapter<InputIterator>::ConvertUtf8ToUcs2(size_t byte_count, UC8Bytes* utf8) const {
   switch (byte_count) {
     case 1:
-      return ConvertAscii();
+      return ConvertAscii(utf8);
     case 2:
-      return Convert2Byte();
+      return Convert2Byte(utf8);
     case 3:
-      return Convert3Byte();
+      return Convert3Byte(utf8);
     case 4:
-      return Convert4Byte();
+      return Convert4Byte(utf8);
     default:
       return 0;
   }
@@ -78,15 +79,18 @@ uint32_t UnicodeIteratorAdapter<16, InputIterator>::ConvertUtf8ToUcs2(size_t byt
 
 
 template <typename InputIterator>
-uint32_t UnicodeIteratorAdapter<16, InputIterator>::Convert2Byte() const {
+uint32_t UnicodeIteratorAdapter<InputIterator>::Convert2Byte(UC8Bytes* utf8) const {
   const uint8_t kMinimumRange = 0x00000080;
   char c = *begin_;
   if (Utf8::IsNotNull(c)) {
+    (*utf8)[0] = c;
     uint32_t next = Mask<5>(c) << 6;
     c = *(begin_ + 1);
     if (Utf8::IsValidSequence(c)) {
       next = next | Mask<6>(c);
       if (next > kMinimumRange) {
+        (*utf8)[1] = c;
+        (*utf8)[2] = '\0';
         return next;
       }
     }
@@ -96,18 +100,22 @@ uint32_t UnicodeIteratorAdapter<16, InputIterator>::Convert2Byte() const {
 
 
 template <typename InputIterator>
-uint32_t UnicodeIteratorAdapter<16, InputIterator>::Convert3Byte() const {
+uint32_t UnicodeIteratorAdapter<InputIterator>::Convert3Byte(UC8Bytes* utf8) const {
   const int kMinimumRange = 0x00000800;
   char c = *begin_;
   if (Utf8::IsNotNull(c)) {
+    (*utf8)[0] = c;
     uint32_t next = Mask<4>(c) << 12;
     c = *(begin_ + 1);
     if (Utf8::IsValidSequence(c)) {
+      (*utf8)[1] = c;
       next = next | Mask<6>(c) << 6;
       c = *(begin_ + 2);
       if (Utf8::IsValidSequence(c)) {
         next = next | Mask<6>(c);
         if (next > kMinimumRange && Utf16::IsOutOfSurrogateRange(next)) {
+          (*utf8)[2] = c;
+          (*utf8)[3] = '\0';
           return next;
         }
       }
@@ -118,21 +126,26 @@ uint32_t UnicodeIteratorAdapter<16, InputIterator>::Convert3Byte() const {
 
 
 template <typename InputIterator>
-uint32_t UnicodeIteratorAdapter<16, InputIterator>::Convert4Byte() const {
+uint32_t UnicodeIteratorAdapter<InputIterator>::Convert4Byte(UC8Bytes* utf8) const {
   const int kMinimumRange = 0x000010000;
   char c = *begin_;
   if (Utf8::IsNotNull(c)) {
+    (*utf8)[0] = c;
     uint32_t next = Mask<3>(c) << 18;
     c = *(begin_ + 1);
     if (Utf8::IsValidSequence(c)) {
+      (*utf8)[1] = c;
       next = next | Mask<6>(c) << 12;
       c = *(begin_ + 2);
       if (Utf8::IsValidSequence(c)) {
+        (*utf8)[2] = c;
         next = next | Mask<6>(c) << 6;
         c = *(begin_ + 3);
         if (Utf8::IsValidSequence(c)) {
           next = next | Mask<6>(c);
           if (next >= kMinimumRange && next <= 0x10FFFF) {
+            (*utf8)[3] = c;
+            (*utf8)[4] = '\0';
             return next;
           }
         }

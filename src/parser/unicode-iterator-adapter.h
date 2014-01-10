@@ -22,8 +22,8 @@
  * THE SOFTWARE.
  */
 
-#ifndef PARSER_UNICODE_H_
-#define PARSER_UNICODE_H_
+#ifndef PARSER_UNICODE_ITERATOR_ADAPTER_H_
+#define PARSER_UNICODE_ITERATOR_ADAPTER_H_
 
 #include <array>
 #include <stdint.h>
@@ -35,30 +35,26 @@
 #include "./uchar.h"
 
 namespace rasp {
-template <int Code, typename InputIterator>
-class UnicodeIteratorAdapter{};
-
-
 template <typename InputIterator>
-class UnicodeIteratorAdapter<16, InputIterator> : public std::iterator<std::forward_iterator_tag, UChar> {
+class UnicodeIteratorAdapter : public std::iterator<std::forward_iterator_tag, UChar> {
  public:
   
   
-  UnicodeIteratorAdapter<16, InputIterator>(InputIterator begin);
+  UnicodeIteratorAdapter(InputIterator begin);
 
   
   template <typename T>
-  UnicodeIteratorAdapter<16, InputIterator>(const UnicodeIteratorAdapter<16, T>& un);
+  UnicodeIteratorAdapter(const UnicodeIteratorAdapter<T>& un);
 
 
   template <typename T>
-  UnicodeIteratorAdapter<16, InputIterator>(UnicodeIteratorAdapter<16, T>&& un);
+  UnicodeIteratorAdapter(UnicodeIteratorAdapter<T>&& un);
 
   
-  ~UnicodeIteratorAdapter<16, InputIterator>() = default;
+  ~UnicodeIteratorAdapter() = default;
 
 
-  INLINE UnicodeIteratorAdapter<16, InputIterator>& operator = (InputIterator iter) {begin_ = iter;}
+  INLINE UnicodeIteratorAdapter& operator = (InputIterator iter) {begin_ = iter;}
   
 
   INLINE bool operator == (const InputIterator& iter){return begin_ == iter;}
@@ -70,16 +66,16 @@ class UnicodeIteratorAdapter<16, InputIterator> : public std::iterator<std::forw
   INLINE UChar operator* () const {return Next();}
 
 
-  INLINE UnicodeIteratorAdapter<16, InputIterator>& operator ++() {Advance();return *this;}
+  INLINE UnicodeIteratorAdapter& operator ++() {Advance();return *this;}
 
 
-  INLINE UnicodeIteratorAdapter<16, InputIterator>& operator +=(int c) {
+  INLINE UnicodeIteratorAdapter& operator +=(int c) {
     while (c--) Advance();
     return *this;
   }
 
 
-  INLINE const UnicodeIteratorAdapter<16, InputIterator> operator + (int c) {
+  INLINE const UnicodeIteratorAdapter operator + (int c) {
     UnicodeIteratorAdapter ua(*this);
     while (c--) ++ua;
     return ua;
@@ -100,7 +96,7 @@ class UnicodeIteratorAdapter<16, InputIterator> : public std::iterator<std::forw
   UChar Next() const;
 
   
-  UC32 ConvertUtf8ToUcs2(size_t byte_count) const;
+  UC32 ConvertUtf8ToUcs2(size_t byte_count, UC8Bytes* utf8) const;
 
 
   INLINE void UnicodeIteratorAdapter::Advance() {
@@ -122,18 +118,21 @@ class UnicodeIteratorAdapter<16, InputIterator> : public std::iterator<std::forw
   }
 
   
-  INLINE UC32 ConvertAscii() const {
-    return Mask<8>(*begin_);
+  INLINE UC32 ConvertAscii(UC8Bytes* utf8) const {
+    UC8 uc = *begin_;
+    (*utf8)[0] = uc;
+    (*utf8)[1] = '\0';
+    return Mask<8>(uc);
   }
   
   
-  UC32 Convert2Byte() const;
+  UC32 Convert2Byte(UC8Bytes* utf8) const;
 
   
-  UC32 Convert3Byte() const;
+  UC32 Convert3Byte(UC8Bytes* utf8) const;
 
   
-  UC32 Convert4Byte() const;
+  UC32 Convert4Byte(UC8Bytes* utf8) const;
 
   
   UC32 current_position_;
