@@ -23,45 +23,11 @@
  */
 
 #include <gtest/gtest.h>
-#include <iostream>
 #include <string>
-#include <fstream>
-#include <sstream>
-#include <stdexcept>
+#include "../readfile.h"
 #include "../../src/parser/unicode-iterator-adapter.h"
 #include "../../src/parser/uchar.h"
-
-
-inline std::string ReadFile(const char* filename) {
-  std::string tmp_buffer;
-  std::stringstream ss;
-  std::ifstream file(filename, std::ios::binary | std::ios::in);
-  if (file.is_open()) {
-    while (std::getline(file, tmp_buffer)) {
-      ss << tmp_buffer;
-    }
-    file.close();
-    return ss.str();
-  } else {
-    throw new std::runtime_error("bad file path.");
-  }
-}
-
-
-::testing::AssertionResult CompareUchar(const std::string& value, const std::string expected, int i) {
-  char a = value.at(i);
-  char b = expected.at(i);
-  if (a == b) {
-    return ::testing::AssertionSuccess();
-  }
-  return ::testing::AssertionFailure()
-      << "The value of index " << i << " expected " << b << " but got " << a
-      << "\nvalue:    " << value.substr(0, i) << '\n'
-      << "           " << std::string(i - 2, '-') << "^"
-      << "\nexpected: " << expected.substr(0, i) << '\n'
-      << "           " << std::string(i - 2, '-') << "^"
-      << '\n';
-}
+#include "../compare-string.h"
 
 
 ::testing::AssertionResult Failed(const rasp::UChar& uchar, const rasp::UnicodeIteratorAdapter<std::string::iterator>& un) {
@@ -94,17 +60,9 @@ inline std::string ReadFile(const char* filename) {
 }
 
 
-void CompareBuffer(const std::string& buffer, const std::string& expectation) {
-  for (int i = 0, len = buffer.size(); i < len; i++) {
-    ASSERT_TRUE(CompareUchar(buffer, expectation, i));
-    i++;
-  }
-}
-
-
-inline void UnicodeTest(const char* input, const char* expected, int surrogate_begin, size_t expected_size) {
-  auto source = ReadFile(input);
-  auto result = ReadFile(expected);
+inline void UnicodeTest(const char* input, const char* expected, size_t expected_size) {
+  auto source = rasp::testing::ReadFile(input);
+  auto result = rasp::testing::ReadFile(expected);
   std::string buffer;
   std::string utf8_buffer;
   static const char* kFormat = "%#019x";
@@ -115,12 +73,6 @@ inline void UnicodeTest(const char* input, const char* expected, int surrogate_b
   for (;un != end; std::advance(un, 1)) {
     const rasp::UChar uc = *un;
     ASSERT_TRUE(IsValid(uc, un));
-    if (surrogate_begin == -1 || surrogate_begin > index) {
-      ASSERT_TRUE(IsNotSurrogatePair(uc, un));
-    } else {
-      ASSERT_TRUE(IsSurrogatePair(uc, un));
-    }
-    index++;
     if (uc.IsAscii()) {
       buffer.append(1, uc.ToAscii());
     } else {
@@ -133,24 +85,23 @@ inline void UnicodeTest(const char* input, const char* expected, int surrogate_b
     }
     utf8_buffer.append(uc.utf8());
     size += uc.IsSurrogatePair()? 2: 1;
+    index++;
   }
   ASSERT_EQ(expected_size, size);
-  CompareBuffer(buffer, result);
-  CompareBuffer(utf8_buffer, source);
+  rasp::testing::CompareString(buffer, result);
+  rasp::testing::CompareString(utf8_buffer, source);
 }
 
 
 TEST(UnicodeIteratorAdapter, parse_valid_utf8_code_test) {
   UnicodeTest("test/parser/unicode-test-cases/valid-utf8.txt",
               "test/parser/unicode-test-cases/valid-utf8.result.txt",
-              -1,
-              146);
+              148);
 }
 
 
 TEST(UnicodeIteratorAdapter, parse_valid_utf8_surrogate_pair_code_test) {
   UnicodeTest("test/parser/unicode-test-cases/valid-utf8-surrogate-pair.txt",
               "test/parser/unicode-test-cases/valid-utf8-surrogate-pair.result.txt",
-              68,
-              674);
+              676);
 }

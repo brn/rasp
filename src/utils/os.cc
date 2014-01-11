@@ -33,6 +33,7 @@
 #include "bytelen.h"
 
 namespace rasp {
+
 #ifdef _WIN32
 int VAArgs(const char* format, va_list args) {
   return _vscprintf(format, args) + 1;
@@ -54,6 +55,7 @@ void Printf(const char* format, ...) {
   va_end(args);
 }
 
+
 void SPrintf(std::string& buf, bool append, const char* format, ...) {
   va_list args;
   va_start(args, format);
@@ -72,9 +74,9 @@ void SPrintf(std::string& buf, bool append, const char* format, ...) {
 
 void VSPrintf(std::string& buf, bool append, const char* format, va_list args) {
   int len = VAArgs(format, args);
-  char* buffer = static_cast<char*>(malloc(len * sizeof(char)));
+  char* buffer = static_cast<char*>(malloc((len + 10) * sizeof(char)));
   assert(buffer != NULL);
-  vsprintf_s(buffer, len, format, args);
+  vsprintf_s(buffer, len + 10, format, args);
   if (!append) {
     buf.assign(buffer);
   } else {
@@ -88,6 +90,7 @@ void VFPrintf(FILE* fp, const char* format, va_list arg) {
   vfprintf_s(fp, format, arg);
 }
 
+
 void FPrintf(FILE* fp, const char* format, ...) {
   va_list args;
   va_start(args, format);
@@ -95,8 +98,19 @@ void FPrintf(FILE* fp, const char* format, ...) {
   va_end(args);
 }
 
+
 FILE* FOpen(const char* filename, const char* mode) {
-  return _fsopen(filename, mode, _SH_DENYNO);
+  FILE *fp = _fsopen(filename, mode, _SH_DENYNO);
+  if (fp == NULL) {
+    std::string buf;
+    Strerror(&buf, _doserrno);
+    throw std::move(FileIOException(buf.c_str()));
+  }
+  return fp;
+}
+
+size_t FRead(void* buffer, size_t buffer_size, size_t element_size, size_t count, FILE* fp) {
+  return fread_s(buffer ,buffer_size, element_size, count, fp);
 }
 
 void FClose(FILE* fp) {
@@ -222,7 +236,16 @@ void FPrintf(FILE* fp, const char* format, ...) {
 
 FILE* FOpen(const char* filename, const char* mode) {
   FILE* fp = fopen(filename, mode);
+  if (fp == NULL) {
+    std::string buf;
+    Strerror(&buf, errno);
+    throw std::move(FileIOException(buf.c_str()));
+  }
   return fp;
+}
+
+size_t FRead(void* buffer, size_t buffer_size, size_t element_size, size_t count, FILE* fp) {
+  return fread(buffer ,element_size, count, fp);
 }
 
 void FClose(FILE* fp) {

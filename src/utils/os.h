@@ -27,6 +27,7 @@
 
 #include <errno.h>
 #include <string>
+#include <stdexcept>
 
 #ifdef _WIN32
 #define K_ERRNO _doserrno
@@ -35,6 +36,20 @@
 #endif
 
 namespace rasp {
+class FileIOException : public std::exception {
+ public:
+  FileIOException(const char* message)
+      : message_(message){}
+
+  FileIOException(FileIOException&& e)
+      : message_(std::move(e.message_)) {}
+  const char* what() const {return message_.c_str();}
+
+ private:
+  std::string message_;
+};
+
+
 void Strerror(std::string* buf, int err);
 void Printf(const char* format, ...);
 void SPrintf(std::string& buf, bool append, const char* format, ...);
@@ -42,6 +57,7 @@ void VSPrintf(std::string& buf, bool append, const char* format, va_list args);
 void VFPrintf(FILE* fp, const char* format, ...);
 void FPrintf(FILE* fp, const char* format, ...);
 FILE* FOpen(const char* filename, const char* mode);
+size_t FRead(void* buffer, size_t buffer_size, size_t element_size, size_t count, FILE* fp);
 void FClose(FILE* fp);
 void GetEnv(std::string *buf, const char* env);
 bool Sleep(int nano_time);
