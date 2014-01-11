@@ -34,7 +34,7 @@
       'target_name': 'scanner_test',
       'product_name': 'ScannerTest',
       'type': 'executable',
-      'include_dirs' : ['./lib'],
+      'include_dirs' : ['./lib', '<(additional_include)'],
       'defines' : ['GTEST_HAS_RTTI=0', 'UNIT_TEST=1'],
       'sources': [
         './src/utils/os.h',
@@ -60,7 +60,7 @@
       'target_name': 'unicode_iterator_adapter_test',
       'product_name': 'UnicodeIteratorAdapterTest',
       'type': 'executable',
-      'include_dirs' : ['./lib'],
+      'include_dirs' : ['./lib', '<(additional_include)'],
       'defines' : ['GTEST_HAS_RTTI=0', 'UNIT_TEST=1'],
       'sources': [
         './src/utils/os.h',

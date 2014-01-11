@@ -29,95 +29,146 @@
 #include <stdint.h>
 #include <iterator>
 #include <utility>
+#include <boost/concept/assert.hpp>
+#include <boost/concept_check.hpp>
 #include "../utils/inline.h"
 #include "../utils/bitmask.h"
 #include "../utils/unicode.h"
 #include "./uchar.h"
 
+
 namespace rasp {
+/**
+ * This class is the utf-8 to utf-16 convertor adapter for forward_iterator.
+ */
 template <typename InputIterator>
 class UnicodeIteratorAdapter : public std::iterator<std::forward_iterator_tag, UChar> {
+  // We require template parameter InputIterator which satisfy randowm_access_iterator_tag
+  BOOST_CONCEPT_ASSERT((boost::RandomAccessIterator<InputIterator>));
  public:
   
-  
+  /**
+   * @param begin utf-8 iterator
+   */
   UnicodeIteratorAdapter(InputIterator begin);
-
-  
   template <typename T>
   UnicodeIteratorAdapter(const UnicodeIteratorAdapter<T>& un);
-
-
   template <typename T>
   UnicodeIteratorAdapter(UnicodeIteratorAdapter<T>&& un);
-
-  
   ~UnicodeIteratorAdapter() = default;
-
-
   INLINE UnicodeIteratorAdapter& operator = (InputIterator iter) {begin_ = iter;}
   
 
+  /**
+   * Implementation of equality compare to satisfy forward_iterator concept.
+   */
   INLINE bool operator == (const InputIterator& iter){return begin_ == iter;}
 
-  
+
+  /**
+   * Implementation of equality compare to satisfy forward_iterator concept.
+   */
   INLINE bool operator != (const InputIterator& iter){return begin_ != iter;}
 
-  
-  INLINE UChar operator* () const {return Next();}
+
+  /**
+   * Implementation of dereference to satisfy forward_iterator concept.
+   */
+  INLINE UChar operator* () const {return Convert();}
 
 
+  /**
+   * Implementation of increment to satisfy forward_iterator concept.
+   */
   INLINE UnicodeIteratorAdapter& operator ++() {Advance();return *this;}
 
 
+  /**
+   * Implementation of forward access to satisfy forward_iterator concept.
+   */
   INLINE UnicodeIteratorAdapter& operator +=(int c) {
     while (c--) Advance();
     return *this;
   }
 
 
+  /**
+   * Implementation of add to satisfy forward_iterator concept.
+   */
   INLINE const UnicodeIteratorAdapter operator + (int c) {
     UnicodeIteratorAdapter ua(*this);
     while (c--) ++ua;
     return ua;
   }
   
-  
+
+  /**
+   * Return current line number.
+   * @return line number
+   */
   INLINE UC32 line_number() const {return line_number_;}
 
-  
+
+  /**
+   * Return current char cursor position.
+   * @return current char position.
+   */
   INLINE UC32 current_position() const {return current_position_;}
 
-  
+
+  /**
+   * Unwrap iterator.
+   * @return wapped iterator.
+   */
   INLINE const InputIterator& base() const {return begin_;}
 
   
  private:
 
-  UChar Next() const;
+  /**
+   * Convert curent utf-8 byte sequence to utf-32 byte sequence.
+   * @return the utf-32 byte sequence representations.
+   */
+  UChar Convert() const;
 
-  
+
+  /**
+   * Convert current utf-8 byte sequence to ucs2 code set.
+   */
   UC32 ConvertUtf8ToUcs2(size_t byte_count, UC8Bytes* utf8) const;
 
 
+  /**
+   * Advance iterator.
+   */
   INLINE void UnicodeIteratorAdapter::Advance() {
     UC8 next = *begin_;
-    size_t byte_count = Utf8::GetByteCount(next);
+    auto byte_count = Utf8::GetByteCount(next);
     if (next == '\n') {
       current_position_ = 1;
       line_number_++;
     } else {
-      current_position_ += byte_count;
+      current_position_++;
     }
     std::advance(begin_, byte_count);
   }
 
-  
+
+  /**
+   * Bit mask.
+   * @return masked bit.
+   */
   template<std::size_t N, typename CharT>
   INLINE CharT Mask(CharT ch) const {
     return Bitmask<N, UC32>::lower & ch;
   }
 
   
+  /**
+   * Convert a utf-8 byte sequence.
+   * @param utf8 buffer to reserve utf-8 byte sequence.
+   * @return utf-32 byte sequence.
+   */
   INLINE UC32 ConvertAscii(UC8Bytes* utf8) const {
     UC8 uc = *begin_;
     (*utf8)[0] = uc;
@@ -125,13 +176,28 @@ class UnicodeIteratorAdapter : public std::iterator<std::forward_iterator_tag, U
     return Mask<8>(uc);
   }
   
-  
+
+  /**
+   * Convert 2 utf-8 byte sequence.
+   * @param utf8 buffer to reserve utf-8 byte sequence.
+   * @return utf-32 byte sequence.
+   */
   UC32 Convert2Byte(UC8Bytes* utf8) const;
 
-  
+
+  /**
+   * Convert 3 utf-8 byte sequence.
+   * @param utf8 buffer to reserve utf-8 byte sequence.
+   * @return utf-32 byte sequence.
+   */
   UC32 Convert3Byte(UC8Bytes* utf8) const;
 
-  
+
+  /**
+   * Convert 4 utf-8 byte sequence.
+   * @param utf8 buffer to reserve utf-8 byte sequence.
+   * @return utf-32 byte sequence.
+   */
   UC32 Convert4Byte(UC8Bytes* utf8) const;
 
   

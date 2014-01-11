@@ -64,12 +64,17 @@ inline std::string ReadFile(const char* filename) {
 }
 
 
-::testing::AssertionResult IsValid(const rasp::UChar& uchar, const rasp::UnicodeIteratorAdapter<std::string::iterator>& un) {
-  if (!uchar.IsInvalid()) {
-    return ::testing::AssertionSuccess();
-  }
+::testing::AssertionResult Failed(const rasp::UChar& uchar, const rasp::UnicodeIteratorAdapter<std::string::iterator>& un) {
   return ::testing::AssertionFailure() << "Invalid unicode charactor. at: " << un.current_position()
                                        << " value: " + uchar.uchar();
+}
+
+
+::testing::AssertionResult IsValid(const rasp::UChar& uchar, const rasp::UnicodeIteratorAdapter<std::string::iterator>& un) {
+  if (!uchar.IsInvalid() && static_cast<bool>(uchar)) {
+    return ::testing::AssertionSuccess();
+  }
+  return Failed(uchar, un);
 }
 
 
@@ -77,15 +82,13 @@ inline std::string ReadFile(const char* filename) {
   if (uchar.IsSurrogatePair()) {
     return ::testing::AssertionSuccess();
   }
-  return ::testing::AssertionFailure() << "Invalid unicode charactor. at: " << un.current_position()
-                                       << " value: " << uchar.uchar();
+  return Failed(uchar, un);
 }
 
 
 ::testing::AssertionResult IsNotSurrogatePair(const rasp::UChar& uchar, const rasp::UnicodeIteratorAdapter<std::string::iterator>& un) {
   if (uchar.IsSurrogatePair()) {
-    return ::testing::AssertionFailure() << "Invalid unicode charactor. at: " << un.current_position()
-                                         << " value: " << uchar.uchar();
+    return Failed(uchar, un);
   }
   return ::testing::AssertionSuccess();
 }
@@ -100,8 +103,8 @@ void CompareBuffer(const std::string& buffer, const std::string& expectation) {
 
 
 inline void UnicodeTest(const char* input, const char* expected, int surrogate_begin, size_t expected_size) {
-  std::string source = ReadFile(input);
-  std::string result = ReadFile(expected);
+  auto source = ReadFile(input);
+  auto result = ReadFile(expected);
   std::string buffer;
   std::string utf8_buffer;
   static const char* kFormat = "%#019x";
@@ -119,13 +122,13 @@ inline void UnicodeTest(const char* input, const char* expected, int surrogate_b
     }
     index++;
     if (uc.IsAscii()) {
-      buffer.append(1, uc.ascii());
+      buffer.append(1, uc.ToAscii());
     } else {
       if (!uc.IsSurrogatePair()) {
         rasp::SPrintf(buffer, true, kFormat, uc.uchar());
       } else {
-        rasp::SPrintf(buffer, true, kFormat, uc.high_surrogate());
-        rasp::SPrintf(buffer, true, kFormat, uc.low_surrogate());
+        rasp::SPrintf(buffer, true, kFormat, uc.ToHighSurrogate());
+        rasp::SPrintf(buffer, true, kFormat, uc.ToLowSurrogate());
       }
     }
     utf8_buffer.append(uc.utf8());
