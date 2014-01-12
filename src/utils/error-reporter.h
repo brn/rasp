@@ -33,17 +33,11 @@
 #include "os.h"
 
 
-#define ERROR_REPORTER_FORMAT__(message, file, line)  \
-  std::stringstream ss;                               \
-  ss << message << '\n'                               \
-  << "in: " << file << '\n'                           \
-  << "at: " << line << '\n';
-
 
 namespace rasp {
-template <typename Exception = std::exception>
 class ErrorReporter {
  public:
+  
   ErrorReporter(const char* message)
       : message_(message){}
   
@@ -60,9 +54,9 @@ class ErrorReporter {
       : message_(std::move(e.message_)){}
 
   
-  void Report(bool is_throw = false) {
+  void Report(bool is_exit = false) {
     std::cerr << message_ << std::endl;
-    if (is_throw) throw Exception(message_.c_str());
+    if (is_exit) exit(1);
   }
 
  private:
@@ -70,109 +64,34 @@ class ErrorReporter {
 };
 
 
-template <typename T = std::exception>
 class MaybeFail {
  public:
-  MaybeFail() = default;
-  ~MaybeFail() = default;
-  
-  void AppendError(const char* filename, size_t line_number, const char* error, ...) {
-    success_ = false;
-    va_list args;
-    va_start(args, error);
-    std::string f;
-    VSPrintf(f, false, error, args);
-    ERROR_REPORTER_FORMAT__(f, filename, line_number);
-    message_ += ss.str();
-  }
-
-
-  void AppendError(const char* filename, size_t line_number, const std::string& error, ...) {
-    success_ = false;
-    va_list args;
-    va_start(args, error);
-    std::string f;
-    VSPrintf(f, false, error.c_str(), args);
-    ERROR_REPORTER_FORMAT__(f, filename, line_number);
-    message_ += ss.str();
-  }
-
-
-  void AppendError(const char* filename, size_t line_number, const T& error) {
-    success_ = false;
-    ERROR_REPORTER_FORMAT__(error.what(), filename, line_number);
-    message_ += ss.str();
-  }
+  MaybeFail()
+      : success_(true){}
+  virtual ~MaybeFail() = default;
 
   
   bool success() const {
     return success_;
   }
 
+
+  std::stringstream& Fail() {
+    success_ = false;
+    return message_stream_;
+  }
+
   
-  void Throw(const char* error, const char* filename, size_t line_number) {
-    success_ = false;
-    ERROR_REPORTER_FORMAT__(error, filename, line_number);
-    message_ += ss.str();
-    ErrorReporter<T> e(message_);
-    e.Report(true);
-  }
-
-
-  void Throw(const std::string& error, const char* filename, size_t line_number) {
-    success_ = false;
-    ERROR_REPORTER_FORMAT__(error, filename, line_number);
-    message_ += ss.str();
-    ErrorReporter<T> e(message_);
-    e.Report(true);
-  }
-
-
-  void Throw() {
-    ErrorReporter<T> e(message_);
-    e.Report(true);
-  }
-
-
-  ErrorReporter<T>&& GetReporter(const char* error, const char* filename, size_t line_number) {
-    success_ = false;
-    ERROR_REPORTER_FORMAT__(error, filename, line_number);
-    message_ += ss.str();
-    return ErrorReporter<T>(message_);
-  }
-
-
-  ErrorReporter<T>&& GetReporter(const std::string& error, const char* filename, size_t line_number) {
-    success_ = false;
-    ERROR_REPORTER_FORMAT__(error, filename, line_number);
-    message_ += ss.str();
-    return ErrorReporter<T>(message_);
-  }
-
-
-  ErrorReporter<T>&& GetReporter() {
-    return ErrorReporter<T>(message_);
+  std::string failed_message() const {
+    return message_stream_.str();
   }
   
  private:
   bool success_;
-  std::string message_;
+  std::stringstream message_stream_;
 };
-
-
-#define RASP_APPEND_ERROR(message, ...)                 \
-  AppendError(__FILE__, __LINE__, message, __VA_ARGS__)
-
-
-#define RASP_THROW_ERROR(message, ...)            \
-  Throw(__FILE__, __LINE__, message, __VA_ARGS__)
-
-
-#define RASP_GET_REPORTER(message, ...)                 \
-  GetReporter(message, __FILE__, __LINE__, __VA_ARGS__)
 
 } //namespace rasp
 
 
-#undef ERROR_REPORTER_FORMAT__
 #endif

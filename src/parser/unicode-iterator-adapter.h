@@ -143,7 +143,7 @@ class UnicodeIteratorAdapter : public std::iterator<std::forward_iterator_tag, U
    */
   INLINE void UnicodeIteratorAdapter::Advance() {
     UC8 next = *begin_;
-    auto byte_count = Utf8::GetByteCount(next);
+    auto byte_count = utf8::GetByteCount(next);
     if (next == '\n') {
       current_position_ = 1;
       line_number_++;
@@ -151,16 +151,6 @@ class UnicodeIteratorAdapter : public std::iterator<std::forward_iterator_tag, U
       current_position_++;
     }
     std::advance(begin_, byte_count);
-  }
-
-
-  /**
-   * Bit mask.
-   * @return masked bit.
-   */
-  template<std::size_t N, typename CharT>
-  INLINE CharT Mask(CharT ch) const {
-    return Bitmask<N, UC32>::lower & ch;
   }
 
   
@@ -173,7 +163,7 @@ class UnicodeIteratorAdapter : public std::iterator<std::forward_iterator_tag, U
     UC8 uc = *begin_;
     (*utf8)[0] = uc;
     (*utf8)[1] = '\0';
-    return Mask<8>(uc);
+    return unicode::Mask<8>(uc);
   }
   
 

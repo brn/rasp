@@ -22,6 +22,7 @@
  * THE SOFTWARE.
  */
 
+
 #include <type_traits>
 #include "../utils/bytelen.h"
 #include "token.h"
@@ -97,7 +98,7 @@
 
 namespace rasp {
 Token TokenInfo::GetIdentifierType(const char* maybe_keyword, bool es_harmony) {
-  const int input_length = STRLEN(maybe_keyword);
+  const int input_length = Strlen(maybe_keyword);
   const int min_length = 2;
   const int max_length = 10;
   if (input_length < min_length || input_length > max_length) {

@@ -36,17 +36,18 @@
 
 namespace rasp {
 
-class SourceStream : public MaybeFail<FileIOException>, private Uncopyable {
+class SourceStream : public MaybeFail, private Uncopyable {
  public:
+  typedef std::string::iterator iterator;
   SourceStream(const char* filepath);
 
   INLINE ~SourceStream() = default;
   
   
-  INLINE std::string::iterator begin() {return buffer_.begin();}
+  INLINE iterator begin() {return buffer_.begin();}
   
 
-  INLINE std::string::iterator end() {return buffer_.end();}
+  INLINE iterator end() {return buffer_.end();}
 
 
   INLINE const char* buffer() {return buffer_.c_str();}

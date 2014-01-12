@@ -27,11 +27,17 @@
 
 #include <gtest/gtest.h>
 #include "../../src/parser/scanner.h"
+#include "../../src/parser/uchar.h"
+#include "../unicode-util.h"
 
 
-#define INIT(var, str)                          \
-  rasp::Source source((str));                   \
-  rasp::Scanner scanner(&source);               \
+#define INIT(var, str)                                                  \
+  typedef std::vector<rasp::UChar>::iterator Iterator;                  \
+  std::vector<rasp::UChar> v = rasp::testing::AsciiToUCharVector(str);  \
+  rasp::Scanner<Iterator> scanner(v.begin(), v.end());                  \
   auto var = scanner.Scan();
+
+
+#define END_SCAN ASSERT_EQ(scanner.Scan().type(), rasp::Token::END_OF_INPUT)
 
 #endif

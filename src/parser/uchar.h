@@ -26,6 +26,7 @@
 #define PARSER_UCHAR_H_
 
 #include <string>
+#include <stdexcept>
 #include "../utils/inline.h"
 #include "../utils/bytelen.h"
 #include "../utils/os.h"
@@ -38,6 +39,12 @@ namespace rasp {
  */
 class UChar {
  public:
+
+  INLINE static UChar Null() {
+    UC8Bytes b {{'\0'}};
+    return UChar(unicode::u32('\0'), b);
+  }
+  
   /**
    * Constructor
    * @param c utf-32 byte.
@@ -80,9 +87,116 @@ class UChar {
    */
   INLINE explicit operator bool () const {return !IsInvalid();}
   INLINE explicit operator UC16 () const {return uchar();}
+  INLINE explicit operator int () const {return uchar();}
   INLINE explicit operator const char* () const {return utf8();}
+  INLINE bool operator == (const UChar& uc) const {
+    return uc.uchar_ == uchar_;
+  }
 
 
+  INLINE bool operator == (const UC8 uc) const {
+    return uc == ToAscii();
+  }
+
+
+  INLINE bool operator == (const UC32 uc) const {
+    return uc == uchar_;
+  }
+
+
+  INLINE bool operator != (const UChar& uc) const {
+    return uc.uchar_ == uchar_;
+  }
+  
+  
+  INLINE bool operator != (const UC8 uc) const {
+    return uc != ToAscii();
+  }
+
+
+  INLINE bool operator != (const UC32 uc) const {
+    return uc != uchar_;
+  }
+
+
+  INLINE const UChar operator + (const UC8 uc) const {
+    UC8 next = unicode::u8(ToAscii() + uc);
+    UC8Bytes b{{next, '\0'}};
+    return UChar(next, b);
+  }
+
+
+  INLINE const UChar operator - (const UC8 uc) const {
+    UC8 c = ToAscii();
+    if (c < uc) {
+      throw std::out_of_range("Attempted to subtract by invalid ascii character.");
+    }
+    UC8 next = unicode::u8(ToAscii() - uc);
+    UC8Bytes b{{next, '\0'}};
+    return UChar(next, b);
+  }
+  
+
+  bool operator > (const UChar& uchar) const {
+    return uchar_ > uchar.uchar_;
+  }
+
+
+  INLINE bool operator >= (const UChar& uchar) const {
+    return uchar_ >= uchar.uchar_;
+  }
+
+
+  INLINE bool operator < (const UChar& uchar) const {
+    return uchar_ < uchar.uchar_;
+  }
+
+
+  INLINE bool operator <= (const UChar& uchar) const {
+    return uchar_ <= uchar.uchar_;
+  }
+  
+
+  INLINE bool operator > (const UC8 uc) const {
+    return ToAscii() > uc;
+  }
+
+
+  INLINE bool operator >= (const UC8 uc) const {
+    return ToAscii() >= uc;
+  }
+
+
+  INLINE bool operator < (const UC8 uc) const {
+    return ToAscii() < uc;
+  }
+
+
+  INLINE bool operator <= (const UC8 uc) const {
+    return ToAscii() <= uc;
+  }
+
+
+  INLINE bool operator > (const UC32 uc) const {
+    return uchar_ > uc;
+  }
+
+
+  INLINE bool operator >= (const UC32 uc) const {
+    return uchar_ >= uc;
+  }
+
+
+  INLINE bool operator < (const UC32 uc) const {
+    return uchar_ < uc;
+  }
+
+
+  INLINE bool operator <= (const UC32 uc) const {
+    return uchar_ <= uc;
+  }
+
+  
   /**
    * Return ascii char.
    * @return ascii char.
@@ -95,7 +209,7 @@ class UChar {
    * @return true(if surrogate pair) false(if not surrogate pair)
    */
   INLINE bool IsSurrogatePair() const {
-    return Utf16::IsSurrogatePair(uchar_);
+    return utf16::IsSurrogatePairUC32(uchar_);
   }
   
 
@@ -104,7 +218,7 @@ class UChar {
    * @return utf-16 byte which represent high surrogate byte.
    */
   INLINE UC16 ToHighSurrogate() const {
-    return Utf16::ToHighSurrogate(uchar_);
+    return utf16::ToHighSurrogateUC32(uchar_);
   }
 
 
@@ -113,7 +227,7 @@ class UChar {
    * @return utf-16 byte which represent low surrogate byte.
    */
   INLINE UC16 ToLowSurrogate() const {
-    return Utf16::ToLowSurrogate(uchar_);
+    return utf16::ToLowSurrogateUC32(uchar_);
   }
   
 
@@ -130,7 +244,7 @@ class UChar {
    * Check whether utf-16 byte sequence is within ascii range or not.
    * @return true(if within ascii range) false(if out of ascii range)
    */
-  INLINE bool IsAscii() const {return Utf8::IsAscii(uchar_);}
+  INLINE bool IsAscii() const {return utf8::IsAscii(uchar_);}
 
 
   /**
@@ -145,6 +259,16 @@ class UChar {
    * @return utf-8 char array.
    */
   INLINE const char* utf8() const {return utf8_.data();}
+
+
+  INLINE size_t utf16_length() const {
+    return IsSurrogatePair()? 2: 1;
+  }
+
+
+  INLINE size_t utf8_length() const {
+    return utf8_.size() - 1;
+  }
 
  private:
   

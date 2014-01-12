@@ -64,7 +64,7 @@ UnicodeIteratorAdapter<InputIterator>::UnicodeIteratorAdapter(UnicodeIteratorAda
 template <typename InputIterator>
 UChar UnicodeIteratorAdapter<InputIterator>::Convert () const {
   UC8Bytes utf8;
-  auto byte_count = Utf8::GetByteCount(*begin_);
+  auto byte_count = utf8::GetByteCount(*begin_);
   auto next = ConvertUtf8ToUcs2(byte_count, &utf8);
   // invalidate.
   if (next != 0) {
@@ -96,12 +96,12 @@ template <typename InputIterator>
 uint32_t UnicodeIteratorAdapter<InputIterator>::Convert2Byte(UC8Bytes* utf8) const {
   const uint8_t kMinimumRange = 0x00000080;
   auto c = *begin_;
-  if (Utf8::IsNotNull(c)) {
+  if (utf8::IsNotNull(c)) {
     (*utf8)[0] = c;
-    auto next = Mask<5>(c) << 6;
+    auto next = unicode::Mask<5>(c) << 6;
     c = *(begin_ + 1);
-    if (Utf8::IsValidSequence(c)) {
-      next = next | Mask<6>(c);
+    if (utf8::IsValidSequence(c)) {
+      next = next | unicode::Mask<6>(c);
       if (next > kMinimumRange) {
         (*utf8)[1] = c;
         (*utf8)[2] = '\0';
@@ -117,17 +117,17 @@ template <typename InputIterator>
 uint32_t UnicodeIteratorAdapter<InputIterator>::Convert3Byte(UC8Bytes* utf8) const {
   const int kMinimumRange = 0x00000800;
   auto c = *begin_;
-  if (Utf8::IsNotNull(c)) {
+  if (utf8::IsNotNull(c)) {
     (*utf8)[0] = c;
-    auto next = Mask<4>(c) << 12;
+    auto next = unicode::Mask<4>(c) << 12;
     c = *(begin_ + 1);
-    if (Utf8::IsValidSequence(c)) {
+    if (utf8::IsValidSequence(c)) {
       (*utf8)[1] = c;
-      next = next | Mask<6>(c) << 6;
+      next = next | unicode::Mask<6>(c) << 6;
       c = *(begin_ + 2);
-      if (Utf8::IsValidSequence(c)) {
-        next = next | Mask<6>(c);
-        if (next > kMinimumRange && Utf16::IsOutOfSurrogateRange(next)) {
+      if (utf8::IsValidSequence(c)) {
+        next = next | unicode::Mask<6>(c);
+        if (next > kMinimumRange && utf16::IsOutOfSurrogateRange(next)) {
           (*utf8)[2] = c;
           (*utf8)[3] = '\0';
           return next;
@@ -143,20 +143,20 @@ template <typename InputIterator>
 uint32_t UnicodeIteratorAdapter<InputIterator>::Convert4Byte(UC8Bytes* utf8) const {
   const int kMinimumRange = 0x000010000;
   auto c = *begin_;
-  if (Utf8::IsNotNull(c)) {
+  if (utf8::IsNotNull(c)) {
     (*utf8)[0] = c;
-    auto next = Mask<3>(c) << 18;
+    auto next = unicode::Mask<3>(c) << 18;
     c = *(begin_ + 1);
-    if (Utf8::IsValidSequence(c)) {
+    if (utf8::IsValidSequence(c)) {
       (*utf8)[1] = c;
-      next = next | Mask<6>(c) << 12;
+      next = next | unicode::Mask<6>(c) << 12;
       c = *(begin_ + 2);
-      if (Utf8::IsValidSequence(c)) {
+      if (utf8::IsValidSequence(c)) {
         (*utf8)[2] = c;
-        next = next | Mask<6>(c) << 6;
+        next = next | unicode::Mask<6>(c) << 6;
         c = *(begin_ + 3);
-        if (Utf8::IsValidSequence(c)) {
-          next = next | Mask<6>(c);
+        if (utf8::IsValidSequence(c)) {
+          next = next | unicode::Mask<6>(c);
           if (next >= kMinimumRange && next <= 0x10FFFF) {
             (*utf8)[3] = c;
             (*utf8)[4] = '\0';

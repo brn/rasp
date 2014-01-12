@@ -27,7 +27,11 @@
 #include "sourcestream.h"
 
 namespace rasp {
-SourceStream::SourceStream(const char* filepath) {
+
+const char* kCantOpenInput = "Can not open input file: ";
+
+SourceStream::SourceStream(const char* filepath)
+    : MaybeFail() {
   Stat stat(filepath);
   bool exists = stat.IsExist();
   filepath_ = filepath;
@@ -41,11 +45,13 @@ SourceStream::SourceStream(const char* filepath) {
       ReadBlock(fp);
       FClose(fp);
     } catch (FileIOException&& e) {
-      RASP_APPEND_ERROR("%s ", e.what(), filepath);
+      Fail() << kCantOpenInput << filepath
+             << "\nbecause: " << e.what();
     }
   } else {
     size_ = 0;
-    RASP_APPEND_ERROR("No such file or directory %s", filepath);
+    Fail() << kCantOpenInput << filepath
+           << "\nbeacause: " << "No such file or directory";
   }
 }
 }

@@ -26,6 +26,8 @@
 #define PARSER_TOKEN_H_
 
 #include <string>
+#include "./uc32-vector.h"
+#include "./uchar.h"
 #include "../utils/bytelen.h"
 #include "../utils/inline.h"
 #include "../utils/os.h"
@@ -142,9 +144,7 @@ class TokenInfo {
   TokenInfo() :
       type_(Token::END_OF_INPUT),
       start_col_(0),
-      line_number_(1) {
-    short_value_[0] = '\0';
-  }
+      line_number_(1) {}
   
 
   TokenInfo(const Token& token) = delete;
@@ -153,20 +153,13 @@ class TokenInfo {
   ~TokenInfo() = default;
 
 
-  INLINE void set_value(const char* value) {
-    const size_t max = sizeof(short_value_);
-    size_t size = BYTELEN(value);
-    if (size < max) {
-      Strcpy(short_value_, value, max);
-    } else {
-      short_value_[0] = '\0';
-      value_.assign(value);
-    }
+  INLINE void set_value(UC32Vector<UChar>&& vector) {
+    vector_ = std::move(vector);
   }
   
   
-  INLINE const char* value() const {
-    return short_value_[0] != '\0'? short_value_ : value_.c_str();
+  INLINE const UC32Vector<UChar>& value() const {
+    return vector_;
   }
 
 
@@ -198,27 +191,17 @@ class TokenInfo {
   INLINE size_t line_number() const {
     return line_number_;
   }
-
-
-  INLINE void set_has_line_break_before_next(bool has) {
-    has_line_break_before_next_ = has;
-  }
   
-  
-  INLINE bool has_line_break_before_next() const {
-    return has_line_break_before_next_;
-  }
 
   static Token GetIdentifierType(const char* maybe_keyword, bool es_harmony = false);
   
  private:
-  char short_value_[FAST_VALUE_LENGTH];
-  std::string value_;
+  UC32Vector<UChar> vector_;
   Token type_;
   size_t start_col_;
   size_t line_number_;
-  bool has_line_break_before_next_;
 };
 }
+
 #undef FAST_VALUE_LENGTH
 #endif

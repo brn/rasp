@@ -1,18 +1,18 @@
 /*
  * The MIT License (MIT)
- * 
+ *
  * Copyright (c) 2013 Taketoshi Aono(brn)
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -22,42 +22,28 @@
  * THE SOFTWARE.
  */
 
-#include <gtest/gtest.h>
-#include "../readfile.h"
-#include "../compare-string.h"
-#include "../../src/parser/sourcestream.h"
 
-const char filename[] = "test/parser/sourcestream-test-cases/jquery.js";
+#ifndef TEST_UNICODE_UTIL_H_
+#define TEST_UNICODE_UTIL_H_
 
+#include <utility>
+#include <vector>
+#include <string.h>
+#include "../src/parser/uchar.h"
 
-TEST(SourceStream, read_all_ok) {
-  rasp::SourceStream st(filename);
-  std::string expected = rasp::testing::ReadFile(filename);
-  rasp::testing::CompareString(st.buffer(), expected.c_str());
-}
-
-
-TEST(SourceStream, iterator_ok) {
-  rasp::SourceStream st(filename);
-  std::string expected = rasp::testing::ReadFile(filename);
-  size_t size = expected.size();
-  ASSERT_TRUE(st.success());
-  auto it = st.begin();
-  auto end = st.end();
-  size_t i = 0;
-  while (it != end) {
-    rasp::UC8 expectation = static_cast<rasp::UC8>(expected.at(i));
-    rasp::UC8 actual = *it;
-    ASSERT_EQ(expectation, actual);
-    ++it;
-    i++;
+namespace rasp {
+namespace testing {
+inline std::vector<UChar> AsciiToUCharVector(const char* str) {
+  size_t len = strlen(str);
+  std::vector<UChar> v;
+  rasp::UC8Bytes b;
+  for (size_t i = 0u; i < len; i++) {
+    b[0] = str[i];
+    b[1] = '\0';
+    v.push_back(rasp::UChar(unicode::u32(str[i]), b));
   }
+  return v;
 }
+}} //namespace rasp::testing
 
-
-TEST(SourceStream, load_error) {
-  rasp::SourceStream st("un-exists");
-  ASSERT_FALSE(st.success());
-  ASSERT_EQ(st.size(), 0);
-  ASSERT_GT(st.failed_message().size(), 0U);
-}
+#endif

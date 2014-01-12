@@ -28,141 +28,178 @@
 #include <sstream>
 #include "source.h"
 #include "token.h"
-#include "../utils/visibility.h"
+#include "uc32-vector.h"
+
 
 namespace rasp {
-
+template <typename InputSourceIterator>
 class Scanner {
- private:
-  typedef Source::Char Char;
  public:
   /**
    * @param source The source file content.
    */
-  Scanner(Source* source);
+  Scanner(InputSourceIterator it, InputSourceIterator end);
 
   /**
    * Scan the source file from the current position to the next token position.
    */
   const TokenInfo& Scan();
 
- private:
+
+  INLINE bool has_line_terminator_before_next() const {
+    return has_line_terminator_before_next_;
+  }
+  
+  
+  INLINE const char* message() const {
+    return message_.c_str();
+  }
+
+ private:  
   /**
    * Scan string literal.
    */
-  const TokenInfo& ScanStringLiteral();
+  void ScanStringLiteral();
 
   /**
    * Scan digit literal(includes Hex, Double, Integer)
    */
-  const TokenInfo& ScanDigit();
+  void ScanDigit();
 
   /**
    * Scan identifier.
    */
-  const TokenInfo& ScanIdentifier();
+  void ScanIdentifier();
 
   
-  const TokenInfo& ScanInteger();
+  void ScanInteger();
 
   
-  const TokenInfo& ScanHex();
+  void ScanHex();
 
   
-  const TokenInfo& ScanOperator();
+  void ScanOperator();
 
   
-  const TokenInfo& ScanArithmeticOperator(Token type1, Token type2, Token normal, bool has_let = true);
+  void ScanArithmeticOperator(Token type1, Token type2, Token normal, bool has_let = true);
 
 
-  INLINE void SkipWhiteSpace() {
-    while(IsWhiteSpace()) Advance();
+  bool ScanUnicodeEscapeSequence(UC32Vector<UChar>*);
+
+
+  UC16 ScanHexEscape(const UChar& uchar, int len, bool* success);
+  
+
+  template <typename T>
+  INLINE int ToHexValue(const T& uchar) const {
+    int ret = 0;
+    if (uchar >= unicode::u8('0') && uchar <= unicode::u8('9')) {
+      ret = static_cast<int>(uchar - unicode::u8('0'));
+    } else if (uchar >= unicode::u8('a') && uchar <= unicode::u8('f')) {
+      ret = static_cast<int>(uchar - unicode::u8('a') + 10);
+    } else if (uchar >= unicode::u8('A') && uchar <= unicode::u8('F')) {
+      ret = static_cast<int>(uchar - unicode::u8('A') + 10);
+    } else {
+      return -1;
+    }
+    return ret;
   }
   
 
-  INLINE const TokenInfo& ScanLogicalOperator(Token type1, Token type2, Token type3) {
+  INLINE bool IsEnd() const {
+    return it_ == end_;
+  }
+
+  
+  INLINE void SkipWhiteSpace() {
+    has_line_terminator_before_next_ = false;
+    while(IsWhiteSpace(char_) || char_ == unicode::u8(';')) {
+      if (char_ == unicode::u8('\n') || char_ == unicode::u8(';')) {
+        has_line_terminator_before_next_ = true;
+      }
+      Advance();
+    }
+  }
+  
+
+  INLINE void ScanLogicalOperator(Token type1, Token type2, Token type3) {
     if (lookahead1_ == char_) {
       return BuildToken(type1);
     }
-    if (lookahead1_ == '=') {
+    if (lookahead1_ == unicode::u8('=')) {
       return BuildToken(type2);
     }
-    return BuildToken(type3);
+    BuildToken(type3);
   }
   
 
-  const TokenInfo& ScanBitwiseOrComparationOperator(
+  void ScanBitwiseOrComparationOperator(
       Token type1, Token type2, Token type3, Token normal, Token equal_comparator, bool has_u = false);
 
   
-  const TokenInfo& ScanEqualityComparator(bool not = false);
+  void ScanEqualityComparator(bool not = false);
   
 
   INLINE void UpdateTokenInfo() {
     token_info_.set_start_col(current_position());
     token_info_.set_line_number(line_number());
-    token_info_.set_has_line_break_before_next(lookahead1_ == '\n');
   }
   
 
-  INLINE const TokenInfo& Error(const char* message) {
+  INLINE void Error(const char* message) {
     UpdateTokenInfo();
     token_info_.set_type(Token::ILLEGAL);
-    token_info_.set_value(message);
-    return token_info_;
+    std::stringstream str;
+    message_ += message;
   }
 
 
-  INLINE const TokenInfo& Illegal() {
+  INLINE void Illegal() {
     return Error("Illegal token.");
   }
 
 
-  INLINE const TokenInfo& BuildToken(Token type, const std::stringstream& ss) {
+  INLINE void BuildToken(Token type, UC32Vector<UChar> uv) {
     UpdateTokenInfo();
-    const std::string&& val = ss.str();
-    token_info_.set_value(val.c_str());
+    token_info_.set_value(std::move(uv));
     token_info_.set_type(type);
-    return token_info_;
   }
 
 
-  INLINE const TokenInfo& BuildToken(Token type, const std::string& value) {
-    UpdateTokenInfo();
-    token_info_.set_value(value.c_str());
-    token_info_.set_type(type);
-    return token_info_;
-  }
-
-
-  INLINE const TokenInfo& BuildToken(Token type) {
+  INLINE void BuildToken(Token type) {
     UpdateTokenInfo();
     token_info_.set_type(type);
-    token_info_.set_value("\0");
-    return token_info_;
   }
   
 
-  INLINE void Advance() {
-    char_ = source_->Advance();
-    lookahead1_ = source_->Peek();
-  }
+  void Advance();
 
 
   INLINE size_t current_position() const {
-    return source_->current_position();
+    return current_position_;
   }
 
   
   INLINE size_t line_number() const {
-    return source_->line_number();
+    return line_number_;
   }
   
 
   INLINE bool IsIdentifierStart() const {
-    return (char_ >= 'a' && char_ <= 'z') ||
-        (char_ >= 'A' && char_ <= 'Z') ||
-        char_ == '_' || char_ == '$';
+    return char_.IsAscii() && IsIdentifierStartChar(char_);
+  }
+
+
+  template <typename T>
+  INLINE bool IsIdentifierStartChar(T uchar) const {
+    return (uchar >= unicode::u8('a') && uchar <= unicode::u8('z')) ||
+        (uchar >= unicode::u8('A') && uchar <= unicode::u8('Z')) ||
+        (uchar == unicode::u8('_') || uchar == unicode::u8('$'));
+  }
+
+
+  INLINE bool IsUnicodeEscapeSequenceStart() const {
+    return char_ == unicode::u8('\\') && lookahead1_ == unicode::u8('u');
   }
 
 
@@ -171,53 +208,75 @@ class Scanner {
   }
 
   
-  INLINE bool IsNumericLiteral(Char ch) const {
-    return ch >= '0' && ch <= '9';
+  INLINE bool IsNumericLiteral(const UChar& uchar) const {
+    return uchar.IsAscii() && uchar >= unicode::u8('0') && uchar <= unicode::u8('9');
   }
 
   
   INLINE bool IsHexRange() const {
-    return IsNumericLiteral(char_) ||
-        (char_ >= 'a' && char_ <= 'f') ||
-        (char_ >= 'A' && char_ <= 'F');
+    return char_.IsAscii() &&
+        (IsNumericLiteral(char_) ||
+         (char_ >= unicode::u8('a') && char_ <= unicode::u8('f')) ||
+         (char_ >= unicode::u8('A') && char_ <= unicode::u8('F')));
   }
 
   
   INLINE bool IsStringLiteralStart() const {
-    return char_ == 34 || char_ == 39;
+    return char_.IsAscii() && (char_ == unicode::u8('\'') || char_ == unicode::u8('"'));
   }
 
   
   INLINE bool IsDigitStart() const {
-    return (char_ == '.' && IsNumericLiteral(lookahead1_)) ||
-        (char_ == '0' && lookahead1_ == 'x') ||
-        IsNumericLiteral(char_);
+    return char_.IsAscii() &&
+        ((char_ == unicode::u8('.') && lookahead1_.IsAscii() && IsNumericLiteral(lookahead1_)) ||
+         (char_ == unicode::u8('0') && lookahead1_.IsAscii() && lookahead1_ == unicode::u8('x')) ||
+         IsNumericLiteral(char_));
   }
 
   
   INLINE bool IsOperatorStart() const {
-    return char_ == '+' || char_ == '-' || char_ == '*' ||
-        char_ == '/' || char_ == '<' || char_ == '>' ||
-        char_ == '|' || char_ == '&' || char_ == '~' ||
-        char_ == '^' || char_ == '%' || char_ == '=' ||
-        char_ == '!';
+    return char_.IsAscii() &&
+        (char_ == unicode::u8('+') || char_ == unicode::u8('-') || char_ == unicode::u8('*') ||
+         char_ == unicode::u8('/') || char_ == unicode::u8('<') || char_ == unicode::u8('>') ||
+         char_ == unicode::u8('|') || char_ == unicode::u8('&') || char_ == unicode::u8('~') ||
+         char_ == unicode::u8('^') || char_ == unicode::u8('%') || char_ == unicode::u8('=') ||
+         char_ == unicode::u8('!'));
   }
 
   
-  INLINE bool IsWhiteSpace() const {
-    return char_ == 0x09 ||
-        char_ == 0x0b ||
-        char_ == 0x0c ||
-        char_ == 0x20 ||
-        char_ == 255 ||
-        char_ == '\n';
+  INLINE bool IsWhiteSpace(const UChar& uchar) const {
+    return uchar.IsAscii() &&
+        (uchar == unicode::u8(0x09) ||
+         uchar == unicode::u8(0x0b) ||
+         uchar == unicode::u8(0x0c) ||
+         uchar == unicode::u8(0x20) ||
+         uchar == unicode::u8(255) ||
+         uchar == unicode::u8('\n') ||
+         uchar == unicode::u32(0x2028) ||
+         uchar == unicode::u32(0x1680) ||
+         uchar == unicode::u32(0x180E) ||
+         (uchar >= unicode::u32(0x2000) && uchar <= unicode::u32(0x200A)) ||
+         uchar == unicode::u32(0x2028) ||
+         uchar == unicode::u32(0x2029) ||
+         uchar == unicode::u32(0x202F) ||
+         uchar == unicode::u32(0x205F) ||
+         uchar == unicode::u32(0x3000));
   }
 
-  Source* source_;
+
+  bool has_line_terminator_before_next_;
+  size_t lookahead_cursor_;
+  size_t current_position_;
+  size_t line_number_;
+  InputSourceIterator it_;
+  InputSourceIterator end_;
   TokenInfo token_info_;
-  Char char_;
-  Char lookahead1_;
+  UChar char_;
+  UChar lookahead1_;
+  std::string message_;
 };
 }
 
+
+#include "scanner-inl.h"
 #endif

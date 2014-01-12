@@ -24,12 +24,14 @@
 
 #include "./scanner-test-prelude.h"
 
-#define KEYWORD_TEST(keyword, token_type)             \
-  TEST(ScannerTest, ScanIdentifier_keyword_##keyword) \
-  {                                                   \
-   INIT(token, #keyword);                             \
-   ASSERT_EQ(token.type(), rasp::Token::token_type);  \
-   ASSERT_STREQ(token.value(), #keyword);             \
+#define KEYWORD_TEST(keyword, token_type)                 \
+  TEST(ScannerTest, ScanIdentifier_keyword_##keyword)     \
+  {                                                       \
+    INIT(token, #keyword);                                \
+    ASSERT_EQ(token.type(), rasp::Token::token_type);     \
+    rasp::Utf8Value&& utf8 = token.value().ToUtf8Value(); \
+    ASSERT_STREQ(utf8.c_str(), #keyword);                 \
+    END_SCAN;                                             \
    }
 
 

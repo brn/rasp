@@ -26,8 +26,12 @@
 #define UTILS_BYTELEN_H_
 
 #include <string.h>
+#include "inline.h"
 
-#define BYTELEN(buffer) strlen(buffer) + 1
-#define STRLEN(buffer) strlen(buffer)
-
+namespace rasp {
+template <typename T>
+size_t Strlen(const T* str) {
+  return strlen(static_cast<const char*>(str));
+}
+} //namespace rasp
 #endif

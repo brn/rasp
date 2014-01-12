@@ -39,8 +39,6 @@
       'sources': [
         './src/utils/os.cc',
         './src/parser/token.cc',
-        './src/parser/scanner.cc',
-        './src/parser/source.cc',
         './lib/gtest/gtest-all.cc',
         './test/parser/scanner-keyword-scan-test.cc',
         './test/parser/scanner-operator-scan-test.cc',
