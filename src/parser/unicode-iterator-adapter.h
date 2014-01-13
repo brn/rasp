@@ -31,8 +31,7 @@
 #include <utility>
 #include <boost/concept/assert.hpp>
 #include <boost/concept_check.hpp>
-#include "../utils/inline.h"
-#include "../utils/bitmask.h"
+#include "../utils/utils.h"
 #include "../utils/unicode.h"
 #include "./uchar.h"
 
@@ -56,37 +55,37 @@ class UnicodeIteratorAdapter : public std::iterator<std::forward_iterator_tag, U
   template <typename T>
   UnicodeIteratorAdapter(UnicodeIteratorAdapter<T>&& un);
   ~UnicodeIteratorAdapter() = default;
-  INLINE UnicodeIteratorAdapter& operator = (InputIterator iter) {begin_ = iter;}
+  ALWAYS_INLINE UnicodeIteratorAdapter& operator = (InputIterator iter) {begin_ = iter;}
   
 
   /**
    * Implementation of equality compare to satisfy forward_iterator concept.
    */
-  INLINE bool operator == (const InputIterator& iter){return begin_ == iter;}
+  ALWAYS_INLINE bool operator == (const InputIterator& iter){return begin_ == iter;}
 
 
   /**
    * Implementation of equality compare to satisfy forward_iterator concept.
    */
-  INLINE bool operator != (const InputIterator& iter){return begin_ != iter;}
+  ALWAYS_INLINE bool operator != (const InputIterator& iter){return begin_ != iter;}
 
 
   /**
    * Implementation of dereference to satisfy forward_iterator concept.
    */
-  INLINE UChar operator* () const {return Convert();}
+  ALWAYS_INLINE UChar operator* () const {return Convert();}
 
 
   /**
    * Implementation of increment to satisfy forward_iterator concept.
    */
-  INLINE UnicodeIteratorAdapter& operator ++() {Advance();return *this;}
+  ALWAYS_INLINE UnicodeIteratorAdapter& operator ++() {Advance();return *this;}
 
 
   /**
    * Implementation of forward access to satisfy forward_iterator concept.
    */
-  INLINE UnicodeIteratorAdapter& operator +=(int c) {
+  inline UnicodeIteratorAdapter& operator +=(int c) {
     while (c--) Advance();
     return *this;
   }
@@ -95,7 +94,7 @@ class UnicodeIteratorAdapter : public std::iterator<std::forward_iterator_tag, U
   /**
    * Implementation of add to satisfy forward_iterator concept.
    */
-  INLINE const UnicodeIteratorAdapter operator + (int c) {
+  inline const UnicodeIteratorAdapter operator + (int c) {
     UnicodeIteratorAdapter ua(*this);
     while (c--) ++ua;
     return ua;
@@ -106,21 +105,21 @@ class UnicodeIteratorAdapter : public std::iterator<std::forward_iterator_tag, U
    * Return current line number.
    * @return line number
    */
-  INLINE UC32 line_number() const {return line_number_;}
+  ALWAYS_INLINE UC32 line_number() const {return line_number_;}
 
 
   /**
    * Return current char cursor position.
    * @return current char position.
    */
-  INLINE UC32 current_position() const {return current_position_;}
+  ALWAYS_INLINE UC32 current_position() const {return current_position_;}
 
 
   /**
    * Unwrap iterator.
    * @return wapped iterator.
    */
-  INLINE const InputIterator& base() const {return begin_;}
+  ALWAYS_INLINE const InputIterator& base() const {return begin_;}
 
   
  private:
@@ -141,7 +140,7 @@ class UnicodeIteratorAdapter : public std::iterator<std::forward_iterator_tag, U
   /**
    * Advance iterator.
    */
-  INLINE void UnicodeIteratorAdapter::Advance() {
+  inline void UnicodeIteratorAdapter::Advance() {
     UC8 next = *begin_;
     auto byte_count = utf8::GetByteCount(next);
     if (next == '\n') {
@@ -159,7 +158,7 @@ class UnicodeIteratorAdapter : public std::iterator<std::forward_iterator_tag, U
    * @param utf8 buffer to reserve utf-8 byte sequence.
    * @return utf-32 byte sequence.
    */
-  INLINE UC32 ConvertAscii(UC8Bytes* utf8) const {
+  inline UC32 ConvertAscii(UC8Bytes* utf8) const {
     UC8 uc = *begin_;
     (*utf8)[0] = uc;
     (*utf8)[1] = '\0';

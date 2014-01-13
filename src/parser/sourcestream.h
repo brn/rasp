@@ -27,12 +27,12 @@
 
 #include <iterator>
 #include <string>
-#include "../utils/class-trait.h"
-#include "../utils/inline.h"
-#include "../utils/unicode.h"
-#include "../utils/stat.h"
-#include "../utils/os.h"
 #include "../utils/error-reporter.h"
+#include "../utils/os.h"
+#include "../utils/stat.h"
+#include "../utils/utils.h"
+#include "../utils/unicode.h"
+
 
 namespace rasp {
 
@@ -41,23 +41,23 @@ class SourceStream : public MaybeFail, private Uncopyable {
   typedef std::string::iterator iterator;
   SourceStream(const char* filepath);
 
-  INLINE ~SourceStream() = default;
+  ALWAYS_INLINE ~SourceStream() = default;
   
   
-  INLINE iterator begin() {return buffer_.begin();}
+  ALWAYS_INLINE iterator begin() {return buffer_.begin();}
   
 
-  INLINE iterator end() {return buffer_.end();}
+  ALWAYS_INLINE iterator end() {return buffer_.end();}
 
 
-  INLINE const char* buffer() {return buffer_.c_str();}
+  ALWAYS_INLINE const char* buffer() {return buffer_.c_str();}
 
 
-  INLINE size_t size() const {return size_;}
+  ALWAYS_INLINE size_t size() const {return size_;}
 
 
  private:
-  INLINE void ReadBlock(FILE* fp)  {
+  inline void ReadBlock(FILE* fp)  {
     char* buffer = new char[size_ + 1];
     size_t next = FRead(buffer, size_, sizeof(UC8), size_ - 1, fp);
     if (next > 0) {

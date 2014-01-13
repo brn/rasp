@@ -30,6 +30,7 @@
 #include <stdexcept>
 #include <sstream>
 #include <stdarg.h>
+#include "utils.h"
 #include "os.h"
 
 
@@ -38,23 +39,23 @@ namespace rasp {
 class ErrorReporter {
  public:
   
-  ErrorReporter(const char* message)
+  ALWAYS_INLINE ErrorReporter(const char* message)
       : message_(message){}
   
 
-  ErrorReporter(const std::string& message):
+  ALWAYS_INLINE ErrorReporter(const std::string& message):
       message_(std::move(message)){}
 
 
-  ErrorReporter(const ErrorReporter& e)
+  ALWAYS_INLINE ErrorReporter(const ErrorReporter& e)
       : message_(e.message_){}
 
 
-  ErrorReporter(const ErrorReporter&& e)
+  ALWAYS_INLINE ErrorReporter(const ErrorReporter&& e)
       : message_(std::move(e.message_)){}
 
   
-  void Report(bool is_exit = false) {
+  ALWAYS_INLINE void Report(bool is_exit = false) {
     std::cerr << message_ << std::endl;
     if (is_exit) exit(1);
   }
@@ -66,23 +67,24 @@ class ErrorReporter {
 
 class MaybeFail {
  public:
-  MaybeFail()
+  ALWAYS_INLINE MaybeFail()
       : success_(true){}
+  
   virtual ~MaybeFail() = default;
 
   
-  bool success() const {
+  ALWAYS_INLINE bool success() const {
     return success_;
   }
 
 
-  std::stringstream& Fail() {
+  ALWAYS_INLINE std::stringstream& Fail() {
     success_ = false;
     return message_stream_;
   }
 
   
-  std::string failed_message() const {
+  ALWAYS_INLINE std::string failed_message() const {
     return message_stream_.str();
   }
   

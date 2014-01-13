@@ -22,19 +22,61 @@
  * THE SOFTWARE.
  */
 
-#ifndef UTILS_BITMAST_H_
-#define UTILS_BITMAST_H_
+#ifndef COMPILER_OPTION_H_
+#define COMPILER_OPTION_H_
 
-#include <stdint.h>
-
+#include "utils/utils.h"
 
 namespace rasp {
-template <int LowerBits, typename Type = uint32_t>
-class Bitmask {
+enum class LanguageMode : uint8_t {
+  ES3 = 0,
+  ES5_STRICT,
+  HARMONY
+};
+
+
+class CompilerOption {
  public:
-  static const Type full = ~(Type(0));
-  static const Type upper = ~((Type(1) << LowerBits) - 1);
-  static const Type lower = (Type(1) << LowerBits) - 1;
+  CompilerOption();
+  ALWAYS_INLINE void set_language_mode(LanguageMode language_mode) {
+    language_mode_ = language_mode;
+  }
+  
+  ALWAYS_INLINE LanguageMode language_mode() const {
+    return language_mode_;
+  }
+  
+ private:
+  LanguageMode language_mode_;
+};
+
+
+class LanguageModeUtil : private Static {
+ public:
+  ALWAYS_INLINE static bool IsOctalLiteralAllowed(const CompilerOption& co) {
+    return co.language_mode() == LanguageMode::ES3;
+  }
+
+  
+  ALWAYS_INLINE static bool IsBinaryLiteralAllowed(const CompilerOption& co) {
+    return co.language_mode() == LanguageMode::HARMONY;
+  }
+
+  
+  ALWAYS_INLINE static bool IsHarmony(const CompilerOption& co) {
+    return co.language_mode() == LanguageMode::HARMONY;
+  }
+
+  
+  ALWAYS_INLINE static bool IsES5Strict(const CompilerOption& co) {
+    return co.language_mode() == LanguageMode::ES5_STRICT;
+  }
+
+  
+  ALWAYS_INLINE static bool IsES3(const CompilerOption& co) {
+    return co.language_mode() == LanguageMode::ES3;
+  }
 };
 }
+
 #endif

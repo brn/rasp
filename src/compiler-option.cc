@@ -22,24 +22,9 @@
  * THE SOFTWARE.
  */
 
-#ifndef UTILS_CLASS_TRAIT_H_
-#define UTILS_CLASS_TRAIT_H_
+#include "compiler-option.h"
 
 namespace rasp {
-class Static {
-  Static() = delete;
-  Static(const Static&) = delete;
-  Static(Static&&) = delete;
-  Static& operator = (const Static&) = delete;
-};
-
-class Uncopyable {
-public:
-  Uncopyable() = default;
-  ~Uncopyable() = default;
-  Uncopyable(const Uncopyable&) = delete;
-  Uncopyable& operator = (const Uncopyable&) = delete;
-};
+CompilerOption::CompilerOption()
+    : language_mode_(LanguageMode::ES3) {}
 }
-
-#endif

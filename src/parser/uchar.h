@@ -27,8 +27,7 @@
 
 #include <string>
 #include <stdexcept>
-#include "../utils/inline.h"
-#include "../utils/bytelen.h"
+#include "../utils/utils.h"
 #include "../utils/os.h"
 #include "../utils/unicode.h"
 
@@ -40,7 +39,7 @@ namespace rasp {
 class UChar {
  public:
 
-  INLINE static UChar Null() {
+  ALWAYS_INLINE static UChar Null() {
     UC8Bytes b {{'\0'}};
     return UChar(unicode::u32('\0'), b);
   }
@@ -50,7 +49,7 @@ class UChar {
    * @param c utf-32 byte.
    * @param utf8 utf-8 byte sequence.
    */
-  INLINE explicit UChar(UC32 c, const UC8Bytes& utf8):
+  ALWAYS_INLINE explicit UChar(UC32 c, const UC8Bytes& utf8):
       uchar_(c),
       utf8_(utf8){};
 
@@ -59,13 +58,13 @@ class UChar {
    * Constructor
    * Represent invalid utf-8 sequence.
    */
-  INLINE UChar(): uchar_(0) {}
+  ALWAYS_INLINE UChar(): uchar_(0) {}
   
 
   /**
    * Copy constructor.
    */
-  INLINE UChar(const UChar& uchar):
+  ALWAYS_INLINE UChar(const UChar& uchar):
       uchar_(uchar.uchar_), utf8_(uchar.utf8_) {}
   
 
@@ -75,7 +74,7 @@ class UChar {
   /**
    * Assignment
    */
-  INLINE const UChar& operator = (const UChar& uchar) {
+  ALWAYS_INLINE const UChar& operator = (const UChar& uchar) {
     uchar_ = uchar.uchar_;
     utf8_ = uchar.utf8_;
     return *(this);
@@ -85,48 +84,48 @@ class UChar {
   /**
    * Converters
    */
-  INLINE explicit operator bool () const {return !IsInvalid();}
-  INLINE explicit operator UC16 () const {return uchar();}
-  INLINE explicit operator int () const {return uchar();}
-  INLINE explicit operator const char* () const {return utf8();}
-  INLINE bool operator == (const UChar& uc) const {
+  ALWAYS_INLINE explicit operator bool () const {return !IsInvalid();}
+  ALWAYS_INLINE explicit operator UC16 () const {return uchar();}
+  ALWAYS_INLINE explicit operator int () const {return uchar();}
+  ALWAYS_INLINE explicit operator const char* () const {return utf8();}
+  ALWAYS_INLINE bool operator == (const UChar& uc) const {
     return uc.uchar_ == uchar_;
   }
 
 
-  INLINE bool operator == (const UC8 uc) const {
+  ALWAYS_INLINE bool operator == (const UC8 uc) const {
     return uc == ToAscii();
   }
 
 
-  INLINE bool operator == (const UC32 uc) const {
+  ALWAYS_INLINE bool operator == (const UC32 uc) const {
     return uc == uchar_;
   }
 
 
-  INLINE bool operator != (const UChar& uc) const {
+  ALWAYS_INLINE bool operator != (const UChar& uc) const {
     return uc.uchar_ == uchar_;
   }
   
   
-  INLINE bool operator != (const UC8 uc) const {
+  ALWAYS_INLINE bool operator != (const UC8 uc) const {
     return uc != ToAscii();
   }
 
 
-  INLINE bool operator != (const UC32 uc) const {
+  ALWAYS_INLINE bool operator != (const UC32 uc) const {
     return uc != uchar_;
   }
 
 
-  INLINE const UChar operator + (const UC8 uc) const {
+  inline const UChar operator + (const UC8 uc) const {
     UC8 next = unicode::u8(ToAscii() + uc);
     UC8Bytes b{{next, '\0'}};
     return UChar(next, b);
   }
 
 
-  INLINE const UChar operator - (const UC8 uc) const {
+  inline const UChar operator - (const UC8 uc) const {
     UC8 c = ToAscii();
     if (c < uc) {
       throw std::out_of_range("Attempted to subtract by invalid ascii character.");
@@ -137,62 +136,62 @@ class UChar {
   }
   
 
-  bool operator > (const UChar& uchar) const {
+  ALWAYS_INLINE bool operator > (const UChar& uchar) const {
     return uchar_ > uchar.uchar_;
   }
 
 
-  INLINE bool operator >= (const UChar& uchar) const {
+  ALWAYS_INLINE bool operator >= (const UChar& uchar) const {
     return uchar_ >= uchar.uchar_;
   }
 
 
-  INLINE bool operator < (const UChar& uchar) const {
+  ALWAYS_INLINE bool operator < (const UChar& uchar) const {
     return uchar_ < uchar.uchar_;
   }
 
 
-  INLINE bool operator <= (const UChar& uchar) const {
+  ALWAYS_INLINE bool operator <= (const UChar& uchar) const {
     return uchar_ <= uchar.uchar_;
   }
   
 
-  INLINE bool operator > (const UC8 uc) const {
+  ALWAYS_INLINE bool operator > (const UC8 uc) const {
     return ToAscii() > uc;
   }
 
 
-  INLINE bool operator >= (const UC8 uc) const {
+  ALWAYS_INLINE bool operator >= (const UC8 uc) const {
     return ToAscii() >= uc;
   }
 
 
-  INLINE bool operator < (const UC8 uc) const {
+  ALWAYS_INLINE bool operator < (const UC8 uc) const {
     return ToAscii() < uc;
   }
 
 
-  INLINE bool operator <= (const UC8 uc) const {
+  ALWAYS_INLINE bool operator <= (const UC8 uc) const {
     return ToAscii() <= uc;
   }
 
 
-  INLINE bool operator > (const UC32 uc) const {
+  ALWAYS_INLINE bool operator > (const UC32 uc) const {
     return uchar_ > uc;
   }
 
 
-  INLINE bool operator >= (const UC32 uc) const {
+  ALWAYS_INLINE bool operator >= (const UC32 uc) const {
     return uchar_ >= uc;
   }
 
 
-  INLINE bool operator < (const UC32 uc) const {
+  ALWAYS_INLINE bool operator < (const UC32 uc) const {
     return uchar_ < uc;
   }
 
 
-  INLINE bool operator <= (const UC32 uc) const {
+  ALWAYS_INLINE bool operator <= (const UC32 uc) const {
     return uchar_ <= uc;
   }
 
@@ -201,14 +200,14 @@ class UChar {
    * Return ascii char.
    * @return ascii char.
    */
-  INLINE char ToAscii() const {return static_cast<char>(uchar_);}
+  ALWAYS_INLINE char ToAscii() const {return static_cast<char>(uchar_);}
 
 
   /**
    * Check whether utf-16 byte sequence is surrogate pair or not.
    * @return true(if surrogate pair) false(if not surrogate pair)
    */
-  INLINE bool IsSurrogatePair() const {
+  ALWAYS_INLINE bool IsSurrogatePair() const {
     return utf16::IsSurrogatePairUC32(uchar_);
   }
   
@@ -217,7 +216,7 @@ class UChar {
    * Convert utf-16 byte sequence to high surrogate byte.
    * @return utf-16 byte which represent high surrogate byte.
    */
-  INLINE UC16 ToHighSurrogate() const {
+  ALWAYS_INLINE UC16 ToHighSurrogate() const {
     return utf16::ToHighSurrogateUC32(uchar_);
   }
 
@@ -226,7 +225,7 @@ class UChar {
    * Convert utf-16 byte sequence to low surrogate byte.
    * @return utf-16 byte which represent low surrogate byte.
    */
-  INLINE UC16 ToLowSurrogate() const {
+  ALWAYS_INLINE UC16 ToLowSurrogate() const {
     return utf16::ToLowSurrogateUC32(uchar_);
   }
   
@@ -235,7 +234,7 @@ class UChar {
    * Check whether utf-16 byte sequence is invalid or not.
    * @return true(if invalid) false(if valid)
    */
-  INLINE bool IsInvalid() const {
+  ALWAYS_INLINE bool IsInvalid() const {
     return uchar_ == 0;
   }
 
@@ -244,29 +243,29 @@ class UChar {
    * Check whether utf-16 byte sequence is within ascii range or not.
    * @return true(if within ascii range) false(if out of ascii range)
    */
-  INLINE bool IsAscii() const {return utf8::IsAscii(uchar_);}
+  ALWAYS_INLINE bool IsAscii() const {return utf8::IsAscii(uchar_);}
 
 
   /**
    * Return utf-16 byte sequence.
    * @return utf-16 byte
    */
-  INLINE UC16 uchar() const {return static_cast<UC16>(uchar_);}
+  ALWAYS_INLINE UC16 uchar() const {return static_cast<UC16>(uchar_);}
 
 
   /**
    * Return utf-8 char array that represent this utf-16 byte sequence.
    * @return utf-8 char array.
    */
-  INLINE const char* utf8() const {return utf8_.data();}
+  ALWAYS_INLINE const char* utf8() const {return utf8_.data();}
 
 
-  INLINE size_t utf16_length() const {
+  ALWAYS_INLINE size_t utf16_length() const {
     return IsSurrogatePair()? 2: 1;
   }
 
 
-  INLINE size_t utf8_length() const {
+  ALWAYS_INLINE size_t utf8_length() const {
     return utf8_.size() - 1;
   }
 

@@ -26,16 +26,15 @@
 #define PARSER_TOKEN_H_
 
 #include <string>
-#include "./uc32-vector.h"
+#include "./utfstring.h"
 #include "./uchar.h"
-#include "../utils/bytelen.h"
-#include "../utils/inline.h"
+#include "../utils/utils.h"
 #include "../utils/os.h"
 
 #define FAST_VALUE_LENGTH 20
 
 namespace rasp {
-enum class Token: int {
+enum class Token: uint16_t {
   JS_BREAK,
   JS_CASE,
   JS_CATCH,
@@ -124,6 +123,8 @@ enum class Token: int {
   JS_FUNCTION_GLYPH,
   JS_IDENTIFIER,
   JS_NUMERIC_LITERAL,
+  JS_OCTAL_LITERAL,
+  JS_BINARY_LITERAL,
   JS_STRING_LITERAL,
   JS_REGEXP_LITERAL,
   JS_LINE_BREAK,
@@ -136,6 +137,7 @@ enum class Token: int {
   END_OF_INPUT,
   ILLEGAL
 };
+
 
 
 class TokenInfo {
@@ -153,50 +155,53 @@ class TokenInfo {
   ~TokenInfo() = default;
 
 
-  INLINE void set_value(UC32Vector<UChar>&& vector) {
+  ALWAYS_INLINE void set_value(UtfString&& vector) {
     vector_ = std::move(vector);
   }
   
   
-  INLINE const UC32Vector<UChar>& value() const {
+  ALWAYS_INLINE const UtfString& value() const {
     return vector_;
   }
 
 
-  INLINE void set_type(Token type) {
+  ALWAYS_INLINE void set_type(Token type) {
     type_ = type;
   }
   
   
-  INLINE Token type() const {
+  ALWAYS_INLINE Token type() const {
     return type_;
   }
 
 
-  INLINE void set_start_col(size_t start_col) {
+  ALWAYS_INLINE void set_start_col(size_t start_col) {
     start_col_ = start_col;
   }
   
   
-  INLINE size_t start_col() const {
+  ALWAYS_INLINE size_t start_col() const {
     return start_col_;
   }
 
 
-  INLINE void set_line_number(size_t line_number) {
+  ALWAYS_INLINE void set_line_number(size_t line_number) {
     line_number_ = line_number;
   }
   
   
-  INLINE size_t line_number() const {
+  ALWAYS_INLINE size_t line_number() const {
     return line_number_;
   }
+
+
+  const char* ToString() const;
   
 
   static Token GetIdentifierType(const char* maybe_keyword, bool es_harmony = false);
   
  private:
-  UC32Vector<UChar> vector_;
+  UtfString vector_;
   Token type_;
   size_t start_col_;
   size_t line_number_;

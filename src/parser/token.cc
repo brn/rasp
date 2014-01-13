@@ -24,8 +24,113 @@
 
 
 #include <type_traits>
-#include "../utils/bytelen.h"
+#include "../utils/utils.h"
 #include "token.h"
+
+
+const char* kTokenStringList[] = {
+    "JS_BREAK",
+    "JS_CASE",
+    "JS_CATCH",
+    "JS_CLASS",
+    "JS_CONST",
+    "JS_CONTINUE",
+    "JS_DEBUGGER",
+    "JS_DEFAULT",
+    "JS_DELETE",
+    "JS_DO",
+    "JS_ELSE",
+    "JS_ENUM",
+    "JS_EXPORT",
+    "JS_EXTENDS",
+    "JS_FALSE",
+    "JS_FINALLY",
+    "JS_FOR",
+    "JS_FUNCTION",
+    "JS_IF",
+    "JS_IMPLEMENTS",
+    "JS_IMPORT",
+    "JS_IN",
+    "JS_INSTANCEOF",
+    "JS_INTERFACE",
+    "JS_LET",
+    "JS_NAN",
+    "JS_NEW",
+    "JS_NULL",
+    "JS_PACKAGE",
+    "JS_PRIVATE",
+    "JS_PROTECTED",
+    "JS_PUBLIC",
+    "JS_RETURN",
+    "JS_STATIC",
+    "JS_SUPER",
+    "JS_SWITCH",
+    "JS_THIS",
+    "JS_THROW",
+    "JS_TRUE",
+    "JS_TRY",
+    "JS_TYPEOF",
+    "JS_UNDEFINED",
+    "JS_VAR",
+    "JS_VOID",
+    "JS_WHILE",
+    "JS_WITH",
+    "JS_YIELD",
+    "JS_INCREMENT",
+    "JS_DECREMENT",
+    "JS_EQUAL",
+    "JS_SHIFT_LEFT",
+    "JS_SHIFT_RIGHT",
+    "JS_LESS_EQUAL",
+    "JS_GREATER_EQUAL",
+    "JS_EQ",
+    "JS_NOT_EQUAL",
+    "JS_NOT_EQ",
+    "JS_U_SHIFT_RIGHT",
+    "JS_PLUS",
+    "JS_MINUS",
+    "JS_MUL",
+    "JS_DIV",
+    "JS_MOD",
+    "JS_GREATER",
+    "JS_LESS",
+    "JS_BIT_OR",
+    "JS_BIT_AND",
+    "JS_BIT_NOR",
+    "JS_BIT_XOR",
+    "JS_ASSIGN",
+    "JS_NOT",
+    "JS_ADD_LET",
+    "JS_SUB_LET",
+    "JS_DIV_LET",
+    "JS_MOD_LET",
+    "JS_MUL_LET",
+    "JS_LOGICAL_AND",
+    "JS_LOGICAL_OR",
+    "JS_SHIFT_LEFT_LET",
+    "JS_SHIFT_RIGHT_LET",
+    "JS_U_SHIFT_RIGHT_LET",
+    "JS_NOR_LET",
+    "JS_AND_LET",
+    "JS_OR_LET",
+    "JS_XOR_LET",
+    "JS_FUNCTION_GLYPH",
+    "JS_IDENTIFIER",
+    "JS_NUMERIC_LITERAL",
+    "JS_OCTAL_LITERAL",
+    "JS_BINARY_LITERAL",
+    "JS_STRING_LITERAL",
+    "JS_REGEXP_LITERAL",
+    "JS_LINE_BREAK",
+    "JS_SET",
+    "JS_GET",
+    "JS_REST_PARAMETER",
+    "LINE_TERMINATOR",
+    "FUTURE_STRICT_RESERVED_WORD",
+    "FUTURE_RESERVED_WORD",
+    "END_OF_INPUT",
+    "ILLEGAL"
+  };
 
 
 
@@ -97,6 +202,11 @@
 
 
 namespace rasp {
+
+const char* TokenInfo::ToString() const {
+  return kTokenStringList[static_cast<uint16_t>(type_)];
+}
+
 Token TokenInfo::GetIdentifierType(const char* maybe_keyword, bool es_harmony) {
   const int input_length = Strlen(maybe_keyword);
   const int min_length = 2;

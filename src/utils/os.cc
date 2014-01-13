@@ -30,7 +30,7 @@
 #include <time.h>
 #include <windows.h>
 #include "os.h"
-#include "bytelen.h"
+#include "utils.h"
 
 namespace rasp {
 

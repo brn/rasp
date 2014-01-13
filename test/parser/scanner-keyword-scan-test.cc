@@ -24,15 +24,17 @@
 
 #include "./scanner-test-prelude.h"
 
-#define KEYWORD_TEST(keyword, token_type)                 \
-  TEST(ScannerTest, ScanIdentifier_keyword_##keyword)     \
-  {                                                       \
-    INIT(token, #keyword);                                \
-    ASSERT_EQ(token.type(), rasp::Token::token_type);     \
-    rasp::Utf8Value&& utf8 = token.value().ToUtf8Value(); \
-    ASSERT_STREQ(utf8.c_str(), #keyword);                 \
-    END_SCAN;                                             \
-   }
+#define KEYWORD_TEST(keyword, token_type)                       \
+  TEST(ScannerTest, ScanIdentifier_keyword_##keyword)           \
+  {                                                             \
+    INIT(token, #keyword);                                      \
+    ASSERT_STREQ(#token_type, token.ToString());                \
+    ASSERT_EQ(rasp::Token::token_type, token.type());           \
+    rasp::Utf8Value utf8 = token.value().ToUtf8Value();         \
+    ASSERT_STREQ(utf8.value(), #keyword);                       \
+    ASSERT_EQ(utf8.size(), strlen(#keyword));                   \
+    END_SCAN;                                                   \
+  }
 
 
 #define RESERVED_KW_TEST(keyword)               \

@@ -23,17 +23,70 @@
  */
 
 
-#ifndef UTIL_INLINE_H_
-#define UTIL_INLINE_H_
+#ifndef UTILS_UTILS_H_
+#define UTILS_UTILS_H_
 
+#include <cstdint>
+#include <cstring>
+
+namespace rasp {
 
 /**
  * Inline macro.
  */
 #ifdef _WIN32
-#define INLINE inline
+#define ALWAYS_INLINE inline
 #elif defined(__GNUC__)
-#define INLINE inline __attribute__((always_inline));
+#define ALWAYS_INLINE inline __attribute__((always_inline));
 #endif
+
+
+/**
+ * Class traits.
+ * Represent class which is not allowed to instantiation.
+ */
+class Static {
+  Static() = delete;
+  Static(const Static&) = delete;
+  Static(Static&&) = delete;
+  Static& operator = (const Static&) = delete;
+};
+
+
+/**
+ * Class traits.
+ * Represent class which is not allowed to copy.
+ */
+class Uncopyable {
+public:
+  Uncopyable() = default;
+  ~Uncopyable() = default;
+  Uncopyable(const Uncopyable&) = delete;
+  Uncopyable& operator = (const Uncopyable&) = delete;
+};
+
+
+/**
+ * Bitmask utility.
+ * Borrowed from http://d.hatena.ne.jp/tt_clown/20090616/p1
+ */
+template <int LowerBits, typename Type = uint32_t>
+class Bitmask {
+ public:
+  static const Type full = ~(Type(0));
+  static const Type upper = ~((Type(1) << LowerBits) - 1);
+  static const Type lower = (Type(1) << LowerBits) - 1;
+};
+
+
+/**
+ * Generic strlen.
+ */
+template <typename T>
+ALWAYS_INLINE size_t Strlen(const T* str) {
+  return strlen(static_cast<const char*>(str));
+}
+
+}
 
 #endif

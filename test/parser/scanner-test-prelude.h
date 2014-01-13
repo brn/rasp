@@ -26,16 +26,23 @@
 #define TEST_PARSER_SCANNER_TEST_PRELUDE_H_
 
 #include <gtest/gtest.h>
+#include "../../src/compiler-option.h"
 #include "../../src/parser/scanner.h"
 #include "../../src/parser/uchar.h"
 #include "../unicode-util.h"
 
 
-#define INIT(var, str)                                                  \
+#define INIT__(var, str, type)                                          \
   typedef std::vector<rasp::UChar>::iterator Iterator;                  \
-  std::vector<rasp::UChar> v = rasp::testing::AsciiToUCharVector(str);  \
-  rasp::Scanner<Iterator> scanner(v.begin(), v.end());                  \
+  std::vector<rasp::UChar> v__ = rasp::testing::AsciiToUCharVector(str); \
+  rasp::CompilerOption compiler_option;                                 \
+  compiler_option.set_language_mode(type);                              \
+  rasp::Scanner<Iterator> scanner(v__.begin(), v__.end(), compiler_option); \
   auto var = scanner.Scan();
+
+#define INIT(var, str) INIT__(var, str, rasp::LanguageMode::ES3)
+#define INIT_STRICT(var, str) INIT__(var, str, rasp::LanguageMode::ES5_STRICT)
+#define INIT_HARMONY(var, str) INIT__(var, str, rasp::LanguageMode::HARMONY)
 
 
 #define END_SCAN ASSERT_EQ(scanner.Scan().type(), rasp::Token::END_OF_INPUT)

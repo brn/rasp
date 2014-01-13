@@ -30,7 +30,7 @@ TEST(ScannerTest, ScanStringLiteralTest_normal) {
   INIT(token, "'test string'")
   ASSERT_EQ(token.type(), rasp::Token::JS_STRING_LITERAL);
   rasp::Utf8Value utf8 = token.value().ToUtf8Value();
-  ASSERT_STREQ(utf8.c_str(), "test string");
+  ASSERT_STREQ(utf8.value(), "test string");
   END_SCAN;
 }
 
@@ -39,7 +39,7 @@ TEST(ScannerTest, ScanStringLiteralTest_escaped_string) {
   INIT(token, "'test \\'string'")
   ASSERT_EQ(token.type(), rasp::Token::JS_STRING_LITERAL);
   rasp::Utf8Value utf8 = token.value().ToUtf8Value();
-  ASSERT_STREQ(utf8.c_str(), "test \\'string");
+  ASSERT_STREQ(utf8.value(), "test \\'string");
   END_SCAN;
 }
 
@@ -48,7 +48,7 @@ TEST(ScannerTest, ScanStringLiteralTest_double_escaped_string) {
   INIT(token, "'test \\\\'string'")
   ASSERT_EQ(token.type(), rasp::Token::JS_STRING_LITERAL);
   rasp::Utf8Value utf8 = token.value().ToUtf8Value();
-  ASSERT_STREQ(utf8.c_str(), "test \\\\");
+  ASSERT_STREQ(utf8.value(), "test \\\\");
 }
 
 
@@ -63,7 +63,7 @@ TEST(ScannerTest, ScanStringLiteralTest_unicode_escaped_string) {
   INIT(token, "'\\u0061_foo_\\u0062_bar_\\u0063_baz'")
   ASSERT_EQ(token.type(), rasp::Token::JS_STRING_LITERAL);
   rasp::Utf8Value utf8 = token.value().ToUtf8Value();
-  ASSERT_STREQ(utf8.c_str(), "a_foo_b_bar_c_baz");
+  ASSERT_STREQ(utf8.value(), "a_foo_b_bar_c_baz");
 }
 
 
@@ -85,11 +85,37 @@ TEST(ScannerTest, ScanStringLiteralTest_invalid_unicode_escaped_string3) {
 }
 
 
+TEST(ScannerTest, ScanStringLiteralTest_ascii_escaped_string) {
+  INIT(token, "'\\x61_foo_\\x62_bar_\\x63_baz'")
+  ASSERT_EQ(token.type(), rasp::Token::JS_STRING_LITERAL);
+  rasp::Utf8Value utf8 = token.value().ToUtf8Value();
+  ASSERT_STREQ(utf8.value(), "a_foo_b_bar_c_baz");
+}
+
+
+TEST(ScannerTest, ScanStringLiteralTest_invalid_ascii_escaped_string) {
+  INIT(token, "'\\x6_foo_\\x62_bar_\\x63_baz'")
+  ASSERT_EQ(token.type(), rasp::Token::ILLEGAL);
+}
+
+
+TEST(ScannerTest, ScanStringLiteralTest_invalid_ascii_escaped_string2) {
+  INIT(token, "'\\x61_foo_\\x2_bar_\\x63_baz'")
+  ASSERT_EQ(token.type(), rasp::Token::ILLEGAL);
+}
+
+
+TEST(ScannerTest, ScanStringLiteralTest_invalid_ascii_escaped_string3) {
+  INIT(token, "'\\x61_foo_\\x62_bar_\\x-63_baz'")
+  ASSERT_EQ(token.type(), rasp::Token::ILLEGAL);
+}
+
+
 TEST(ScannerTest, ScanDigit_double) {
   INIT(token, ".3032")
   ASSERT_EQ(token.type(), rasp::Token::JS_NUMERIC_LITERAL);
   rasp::Utf8Value utf8 = token.value().ToUtf8Value();
-  ASSERT_STREQ(utf8.c_str(), ".3032");
+  ASSERT_STREQ(utf8.value(), ".3032");
   END_SCAN;
 }
 
@@ -105,7 +131,7 @@ TEST(ScannerTest, ScanDigit_hex) {
   INIT(token, "0xFFCC33")
   ASSERT_EQ(token.type(), rasp::Token::JS_NUMERIC_LITERAL);
   rasp::Utf8Value utf8 = token.value().ToUtf8Value();
-  ASSERT_STREQ(utf8.c_str(), "0xFFCC33");
+  ASSERT_STREQ(utf8.value(), "0xFFCC33");
   END_SCAN;
 }
 
@@ -114,7 +140,7 @@ TEST(ScannerTest, ScanDigit_int) {
   INIT(token, "1349075")
   ASSERT_EQ(token.type(), rasp::Token::JS_NUMERIC_LITERAL);
   rasp::Utf8Value utf8 = token.value().ToUtf8Value();
-  ASSERT_STREQ(utf8.c_str(), "1349075");
+  ASSERT_STREQ(utf8.value(), "1349075");
   END_SCAN;
 }
 
@@ -123,7 +149,7 @@ TEST(ScannerTest, ScanDigit_double2) {
   INIT(token, "1349.075")
   ASSERT_EQ(token.type(), rasp::Token::JS_NUMERIC_LITERAL);
   rasp::Utf8Value utf8 = token.value().ToUtf8Value();
-  ASSERT_STREQ(utf8.c_str(), "1349.075");
+  ASSERT_STREQ(utf8.value(), "1349.075");
   END_SCAN;
 }
 
@@ -139,7 +165,7 @@ TEST(ScannerTest, ScanDigit_exponent) {
   INIT(token, "1349e+2")
   ASSERT_EQ(token.type(), rasp::Token::JS_NUMERIC_LITERAL);
   rasp::Utf8Value utf8 = token.value().ToUtf8Value();
-  ASSERT_STREQ(utf8.c_str(), "1349e+2");
+  ASSERT_STREQ(utf8.value(), "1349e+2");
   END_SCAN;
 }
 
@@ -148,7 +174,7 @@ TEST(ScannerTest, ScanDigit_exponent2) {
   INIT(token, "1.3e+1")
   ASSERT_EQ(token.type(), rasp::Token::JS_NUMERIC_LITERAL);
   rasp::Utf8Value utf8 = token.value().ToUtf8Value();
-  ASSERT_STREQ(utf8.c_str(), "1.3e+1");
+  ASSERT_STREQ(utf8.value(), "1.3e+1");
   END_SCAN;
 }
 
@@ -168,11 +194,76 @@ TEST(ScannerTest, ScanDigit_exponent_illegal2) {
 }
 
 
+TEST(ScannerTest, ScanOcatalLiteral_valid) {
+  INIT(token, "07771");
+  ASSERT_EQ(token.type(), rasp::Token::JS_OCTAL_LITERAL);
+  rasp::Utf8Value utf8 = token.value().ToUtf8Value();
+  ASSERT_STREQ(utf8.value(), "07771");
+  END_SCAN;
+}
+
+
+TEST(ScannerTest, ScanOcatalLiteral_invalid) {
+  INIT_STRICT(token, "07771");
+  ASSERT_EQ(token.type(), rasp::Token::ILLEGAL);
+}
+
+
+TEST(ScannerTest, ScanBinaryLiteral_valid1) {
+  const char* binary = "0o01111001";
+  INIT_HARMONY(token, binary);
+  ASSERT_EQ(token.type(), rasp::Token::JS_BINARY_LITERAL);
+  rasp::Utf8Value v = token.value().ToUtf8Value();
+  ASSERT_STREQ(v.value(), binary);
+  ASSERT_EQ(v.size(), strlen(binary));
+}
+
+
+TEST(ScannerTest, ScanBinaryLiteral_valid2) {
+  const char* binary = "0O01111001";
+  INIT_HARMONY(token, binary);
+  ASSERT_EQ(token.type(), rasp::Token::JS_BINARY_LITERAL);
+  rasp::Utf8Value v = token.value().ToUtf8Value();
+  ASSERT_STREQ(v.value(), binary);
+  ASSERT_EQ(v.size(), strlen(binary));
+}
+
+
+TEST(ScannerTest, ScanBinaryLiteral_invalid1) {
+  INIT_STRICT(token, "0o0011101");
+  ASSERT_EQ(token.type(), rasp::Token::ILLEGAL);
+}
+
+
+TEST(ScannerTest, ScanBinaryLiteral_invalid2) {
+  INIT(token, "0o0011101");
+  ASSERT_EQ(token.type(), rasp::Token::ILLEGAL);
+}
+
+
+TEST(ScannerTest, ScanBinaryLiteral_invalid3) {
+  INIT_HARMONY(token, "0ox");
+  ASSERT_EQ(token.type(), rasp::Token::ILLEGAL);
+}
+
+
+TEST(ScannerTest, ScanBinaryLiteral_invalid4) {
+  INIT_HARMONY(token, "0o2");
+  ASSERT_EQ(token.type(), rasp::Token::ILLEGAL);
+}
+
+
+TEST(ScannerTest, ScanBinaryLiteral_invalid5) {
+  INIT_HARMONY(token, "0o!");
+  ASSERT_EQ(token.type(), rasp::Token::ILLEGAL);
+}
+
+
 TEST(ScannerTest, ScanIdentifier_identifier) {
   INIT(token, "fooBarBaz");
   ASSERT_EQ(token.type(), rasp::Token::JS_IDENTIFIER);
   rasp::Utf8Value utf8 = token.value().ToUtf8Value();
-  ASSERT_STREQ(utf8.c_str(), "fooBarBaz");
+  ASSERT_STREQ(utf8.value(), "fooBarBaz");
   END_SCAN;
 }
 
@@ -181,7 +272,7 @@ TEST(ScannerTest, ScanIdentifier_identifier2) {
   INIT(token, "$_$_foobar");
   ASSERT_EQ(token.type(), rasp::Token::JS_IDENTIFIER);
   rasp::Utf8Value utf8 = token.value().ToUtf8Value();
-  ASSERT_STREQ(utf8.c_str(), "$_$_foobar");
+  ASSERT_STREQ(utf8.value(), "$_$_foobar");
   END_SCAN;
 }
 
@@ -190,7 +281,7 @@ TEST(ScannerTest, ScanIdentifier_identifier3) {
   INIT(token, "$_$_foobar333_4");
   ASSERT_EQ(token.type(), rasp::Token::JS_IDENTIFIER);
   rasp::Utf8Value utf8 = token.value().ToUtf8Value();
-  ASSERT_STREQ(utf8.c_str(), "$_$_foobar333_4");
+  ASSERT_STREQ(utf8.value(), "$_$_foobar333_4");
   END_SCAN;
 }
 
@@ -200,7 +291,7 @@ TEST(ScannerTest, ScanIdentifier_long_long_identifier) {
   INIT(token, id);
   ASSERT_EQ(token.type(), rasp::Token::JS_IDENTIFIER);
   rasp::Utf8Value utf8 = token.value().ToUtf8Value();
-  ASSERT_STREQ(utf8.c_str(), id);
+  ASSERT_STREQ(utf8.value(), id);
   END_SCAN;
 }
 
@@ -209,7 +300,7 @@ TEST(ScannerTest, ScanIdentifier_identifier_unicode_escape) {
   INIT(token, "\\u0061\\u0062\\u0063");
   ASSERT_EQ(token.type(), rasp::Token::JS_IDENTIFIER);
   rasp::Utf8Value utf8 = token.value().ToUtf8Value();
-  ASSERT_STREQ(utf8.c_str(), "abc");
+  ASSERT_STREQ(utf8.value(), "abc");
   END_SCAN;
 }
 
@@ -218,7 +309,7 @@ TEST(ScannerTest, ScanIdentifier_identifier_unicode_escape_with_ascii) {
   INIT(token, "\\u0061_foo_\\u0062_bar_\\u0063_baz");
   ASSERT_EQ(token.type(), rasp::Token::JS_IDENTIFIER);
   rasp::Utf8Value utf8 = token.value().ToUtf8Value();
-  ASSERT_STREQ(utf8.c_str(), "a_foo_b_bar_c_baz");
+  ASSERT_STREQ(utf8.value(), "a_foo_b_bar_c_baz");
   END_SCAN;
 }
 

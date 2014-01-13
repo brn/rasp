@@ -29,17 +29,20 @@
 #include <sstream>
 #include "scanner.h"
 #include "token.h"
-#include "../utils/inline.h"
+#include "../utils/utils.h"
 
 
 namespace rasp {
 template<typename InputSourceIterator>
-Scanner<InputSourceIterator>::Scanner(InputSourceIterator it, InputSourceIterator end)
+Scanner<InputSourceIterator>::Scanner(InputSourceIterator it,
+                                      InputSourceIterator end,
+                                      const CompilerOption& compiler_option)
     : has_line_terminator_before_next_(false),
       current_position_(0),
       line_number_(1),
       it_(it),
-      end_(end){}
+      end_(end),
+      compiler_option_(compiler_option){}
 
 
 template<typename InputSourceIterator>
@@ -74,13 +77,14 @@ const TokenInfo& Scanner<InputSourceIterator>::Scan() {
     BuildToken(Token::END_OF_INPUT);
   } else if (char_ == unicode::u8(';')) {
     return Scan();
-  } else if (IsIdentifierStart() || IsUnicodeEscapeSequenceStart()) {
+  } else if (Character::IsIdentifierStart(char_) ||
+             Character::IsUnicodeEscapeSequenceStart(char_, lookahead1_)) {
     ScanIdentifier();
-  } else if (IsStringLiteralStart()) {
+  } else if (Character::IsStringLiteralStart(char_)) {
     ScanStringLiteral();
-  } else if (IsDigitStart()) {
+  } else if (Character::IsDigitStart(char_, lookahead1_)) {
     ScanDigit();
-  } else if (IsOperatorStart()) {
+  } else if (Character::IsOperatorStart(char_)) {
     ScanOperator();
   } else {
     Illegal();
@@ -110,7 +114,7 @@ UC16 Scanner<InputSourceIterator>::ScanHexEscape(const UChar& uchar, int len, bo
 template<typename InputSourceIterator>
 void Scanner<InputSourceIterator>::ScanStringLiteral() {
   UChar quote = char_;
-  UC32Vector<UChar> v;
+  UtfString v;
   bool escaped = false;
   while (1) {
     Advance();
@@ -121,12 +125,22 @@ void Scanner<InputSourceIterator>::ScanStringLiteral() {
       escaped = false;
     } else if (char_ == unicode::u8('\0')) {
       return Error("Unterminated string literal.");
-    } else if (!escaped && char_ == unicode::u8('\\') && lookahead1_ == unicode::u8('u')) {
-      if (!ScanUnicodeEscapeSequence(&v)) {
-        return;
-      }
     } else if (char_ == unicode::u8('\\')) {
-      escaped = !escaped;
+      if (!escaped) {
+        if (lookahead1_ == unicode::u8('u')) {
+          if (!ScanUnicodeEscapeSequence(&v)) {
+            return;
+          }
+        } else if (lookahead1_ == unicode::u8('x')) {
+          if (!ScanAsciiEscapeSequence(&v)) {
+            return;
+          }
+        } else {
+          escaped = !escaped; 
+        }
+      } else {
+        escaped = !escaped;
+      }
     }
     v += char_;
   }
@@ -140,9 +154,24 @@ void Scanner<InputSourceIterator>::ScanDigit() {
   if (char_ == unicode::u8('0') && lookahead1_ == unicode::u8('x')) {
     return ScanHex();
   }
+
+  if (char_ == unicode::u8('0')) {
+    if (Character::IsNumericLiteral(lookahead1_)) {
+      if (!LanguageModeUtil::IsOctalLiteralAllowed(compiler_option_)) {
+        return Error("Octal literals are not allowed in strict mode.");
+      }
+      return ScanOctalLiteral();
+    } else if (lookahead1_ == unicode::u8('o') || lookahead1_ == unicode::u8('O')) {
+      if (!LanguageModeUtil::IsBinaryLiteralAllowed(compiler_option_)) {
+        return Error("Binary literals are allowed only in harmony mode.");
+      }
+      return ScanBinaryLiteral();
+    }
+  }
+
   
-  if ((char_ == unicode::u8('.') && IsNumericLiteral(lookahead1_)) ||
-             IsNumericLiteral(char_)) {
+  if ((char_ == unicode::u8('.') && Character::IsNumericLiteral(lookahead1_)) ||
+      Character::IsNumericLiteral(char_)) {
     return ScanInteger();
   }
   Illegal();
@@ -151,12 +180,12 @@ void Scanner<InputSourceIterator>::ScanDigit() {
 
 template<typename InputSourceIterator>
 void Scanner<InputSourceIterator>::ScanHex() {
-  UC32Vector<UChar> v;
+  UtfString v;
   v += char_;
   Advance();
   v += char_;
   Advance();
-  while (IsHexRange()) {
+  while (Character::IsHexRange(char_)) {
     v += char_;
     Advance();
   }
@@ -165,8 +194,37 @@ void Scanner<InputSourceIterator>::ScanHex() {
 
 
 template<typename InputSourceIterator>
+void Scanner<InputSourceIterator>::ScanOctalLiteral() {
+  UtfString str;
+  while (Character::IsNumericLiteral(char_)) {
+    str += char_;
+    Advance();
+  }
+  BuildToken(Token::JS_OCTAL_LITERAL, std::move(str));
+}
+
+
+template<typename InputSourceIterator>
+void Scanner<InputSourceIterator>::ScanBinaryLiteral() {
+  UtfString str;
+  str += char_;
+  Advance();
+  str += char_;
+  Advance();
+  if (!Character::IsBinaryCharacter(char_)) {
+    return Error("Invalid binary literal token.");
+  }
+  while (Character::IsBinaryCharacter(char_)) {
+    str += char_;
+    Advance();
+  }
+  BuildToken(Token::JS_BINARY_LITERAL, std::move(str));
+}
+
+
+template<typename InputSourceIterator>
 void Scanner<InputSourceIterator>::ScanInteger() {
-  UC32Vector<UChar> v;
+  UtfString v;
   v += char_;
   bool js_double = char_ == unicode::u8('.');
   bool exponent = false;
@@ -174,7 +232,7 @@ void Scanner<InputSourceIterator>::ScanInteger() {
   Advance();
   
   while (1) {
-    if (IsNumericLiteral(char_)) {
+    if (Character::IsNumericLiteral(char_)) {
       v += char_;
       if (exponent && !exponent_operator) {
         return Illegal();
@@ -188,7 +246,7 @@ void Scanner<InputSourceIterator>::ScanInteger() {
       return Illegal();
     } else if (!exponent &&
                char_ == unicode::u8('.') &&
-               !js_double && IsNumericLiteral(lookahead1_)) {
+               !js_double && Character::IsNumericLiteral(lookahead1_)) {
       v += char_;
       Advance();
       v += char_;
@@ -213,8 +271,8 @@ void Scanner<InputSourceIterator>::ScanInteger() {
 
 template<typename InputSourceIterator>
 void Scanner<InputSourceIterator>::ScanIdentifier() {
-  UC32Vector<UChar> v;  
-  while (IsInIdentifierRange() || char_ == unicode::u8('\\')) {
+  UtfString v;  
+  while (Character::IsInIdentifierRange(char_) || char_ == unicode::u8('\\')) {
     if (char_ == unicode::u8('\\')) {
       if (!ScanUnicodeEscapeSequence(&v)) {
         return;
@@ -224,8 +282,10 @@ void Scanner<InputSourceIterator>::ScanIdentifier() {
       Advance();
     }
   }
-  std::string str = v.ToUtf8Value();
-  BuildToken(TokenInfo::GetIdentifierType(str.c_str()), std::move(v));
+  Utf8Value utf8_value = v.ToUtf8Value();
+  Token type = TokenInfo::GetIdentifierType(utf8_value.value(),
+                                            LanguageModeUtil::IsHarmony(compiler_option_));
+  BuildToken(type, std::move(v));
 }
 
 
@@ -316,7 +376,7 @@ void Scanner<InputSourceIterator>::ScanEqualityComparator(bool not) {
 
 
 template<typename InputSourceIterator>
-bool Scanner<InputSourceIterator>::ScanUnicodeEscapeSequence(UC32Vector<UChar>* v) {
+bool Scanner<InputSourceIterator>::ScanUnicodeEscapeSequence(UtfString* v) {
   Advance();
   if (char_ != unicode::u8('u')) {
     Error("Illegal Token");
@@ -325,7 +385,7 @@ bool Scanner<InputSourceIterator>::ScanUnicodeEscapeSequence(UC32Vector<UChar>* 
   Advance();
   bool success;
   UC16 uc16 = ScanHexEscape(char_, 4, &success);
-  if (!success || uc16 == '\\' || !IsIdentifierStartChar(uc16)) {
+  if (!success || uc16 == '\\' || !Character::IsIdentifierStartChar(uc16)) {
     Illegal();
     return false;
   }
@@ -335,6 +395,26 @@ bool Scanner<InputSourceIterator>::ScanUnicodeEscapeSequence(UC32Vector<UChar>* 
     return false;
   }
   (*v) += UChar(uc16, bytes);
+  return true;
+}
+
+
+template <typename InputSourceIterator>
+bool Scanner<InputSourceIterator>::ScanAsciiEscapeSequence(UtfString* v) {
+  Advance();
+  if (char_ != unicode::u8('x')) {
+    Error("Illegal Token");
+    return false;
+  }
+  Advance();
+  bool success;
+  UC8 uc8 = unicode::u8(ScanHexEscape(char_, 2, &success));
+  if (!success || !utf8::IsAscii(uc8)) {
+    Illegal();
+    return false;
+  }
+  UC8Bytes bytes{{uc8, '\0'}};
+  (*v) += UChar(uc8, bytes);
   return true;
 }
 

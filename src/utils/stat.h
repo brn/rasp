@@ -29,7 +29,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <time.h>
-#include "inline.h"
+#include "utils.h"
 
 #ifdef _WIN32
 #define STAT_FN(filename, statObj) ::_stat (filename, statObj)
@@ -59,7 +59,7 @@ class Stat{
     kSock
   } FileType;
 
-  INLINE Stat(const char* path)
+  ALWAYS_INLINE Stat(const char* path)
       : path_(path){
     is_exist_ = (STAT_FN(path, &fstat_) != -1);
   }
@@ -68,55 +68,55 @@ class Stat{
   ~Stat(){};
 
 
-  INLINE bool IsExist() const { return is_exist_; }
+  ALWAYS_INLINE bool IsExist() const { return is_exist_; }
 
 
-  INLINE int Dev() const { return fstat_.st_dev;}
+  ALWAYS_INLINE int Dev() const { return fstat_.st_dev;}
 
 
-  INLINE int Ino() const { return fstat_.st_ino; }
+  ALWAYS_INLINE int Ino() const { return fstat_.st_ino; }
 
 
-  INLINE int NLink() const { return fstat_.st_nlink; }
+  ALWAYS_INLINE int NLink() const { return fstat_.st_nlink; }
 
 
-  INLINE int UId() const { return fstat_.st_uid; }
+  ALWAYS_INLINE int UId() const { return fstat_.st_uid; }
 
 
-  INLINE int GId() const { return fstat_.st_gid; };
+  ALWAYS_INLINE int GId() const { return fstat_.st_gid; };
 
 
-  INLINE int RDev() const { return fstat_.st_rdev; };
+  ALWAYS_INLINE int RDev() const { return fstat_.st_rdev; };
 
 
-  INLINE int Size() const { return fstat_.st_size; };
+  ALWAYS_INLINE int Size() const { return fstat_.st_size; };
 
 
-  INLINE const char* ATime() {
+  ALWAYS_INLINE const char* ATime() {
     CTIME(&(fstat_.st_atime),atime_);
     return atime_;
   }
 
 
-  INLINE const char* MTime() {
+  ALWAYS_INLINE const char* MTime() {
     CTIME(&(fstat_.st_mtime),mtime_);
     return mtime_;
   }
 
 
-  INLINE const char* CTime() {
+  ALWAYS_INLINE const char* CTime() {
     CTIME(&(fstat_.st_ctime),ctime_);
     return ctime_;
   }
 
 
-  INLINE bool IsDir() { return MODE == S_IFDIR; }
+  ALWAYS_INLINE bool IsDir() { return MODE == S_IFDIR; }
 
 
-  INLINE bool IsReg() { return MODE == S_IFREG; }
+  ALWAYS_INLINE bool IsReg() { return MODE == S_IFREG; }
 
 
-  INLINE bool IsChr() { return MODE == S_IFCHR; }
+  ALWAYS_INLINE bool IsChr() { return MODE == S_IFCHR; }
 
 
  private :

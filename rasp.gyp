@@ -37,6 +37,7 @@
       'include_dirs' : ['./lib', '<(additional_include)'],
       'defines' : ['GTEST_HAS_RTTI=0', 'UNIT_TEST=1'],
       'sources': [
+        './src/compiler-option.cc',
         './src/utils/os.cc',
         './src/parser/token.cc',
         './lib/gtest/gtest-all.cc',
