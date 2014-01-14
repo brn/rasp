@@ -72,11 +72,18 @@ void Scanner<InputSourceIterator>::Advance()  {
 template<typename InputSourceIterator>
 const TokenInfo& Scanner<InputSourceIterator>::Scan() {
   Advance();
+
+  if (!char_.IsAscii()) {
+    Illegal();
+    return token_info_;
+  }
   
   if (char_ == unicode::u8('\0')) {
     BuildToken(Token::END_OF_INPUT);
   } else if (char_ == unicode::u8(';')) {
     return Scan();
+  } else if (Character::IsPuncture(char_)) {
+    BuildToken(TokenInfo::GetPunctureType(char_));
   } else if (Character::IsIdentifierStart(char_) ||
              Character::IsUnicodeEscapeSequenceStart(char_, lookahead1_)) {
     ScanIdentifier();

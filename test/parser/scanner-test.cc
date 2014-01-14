@@ -345,3 +345,58 @@ TEST(ScannerTest, ScanLineTerminator_line_break_with_space) {
   END_SCAN;
 }
 
+
+TEST(ScannerTest, ScanPuncture_left_paren) {
+  INIT(token, "(");
+  ASSERT_EQ(token.type(), rasp::Token::JS_LEFT_PAREN);
+  END_SCAN;
+}
+
+
+TEST(ScannerTest, ScanPuncture_right_paren) {
+  INIT(token, ")");
+  ASSERT_EQ(token.type(), rasp::Token::JS_RIGHT_PAREN);
+  END_SCAN;
+}
+
+
+TEST(ScannerTest, ScanPuncture_left_brace) {
+  INIT(token, "{");
+  ASSERT_EQ(token.type(), rasp::Token::JS_LEFT_BRACE);
+  END_SCAN;
+}
+
+
+TEST(ScannerTest, ScanPuncture_right_brace) {
+  INIT(token, "}");
+  ASSERT_EQ(token.type(), rasp::Token::JS_RIGHT_BRACE);
+  END_SCAN;
+}
+
+
+TEST(ScannerTest, ScanPuncture_left_bracket) {
+  INIT(token, "[");
+  ASSERT_EQ(token.type(), rasp::Token::JS_LEFT_BRACKET);
+  END_SCAN;
+}
+
+
+TEST(ScannerTest, ScanPuncture_right_bracket) {
+  INIT(token, "]");
+  ASSERT_EQ(token.type(), rasp::Token::JS_RIGHT_BRACKET);
+  END_SCAN;
+}
+
+
+TEST(ScannerTest, ScanPuncture_colon) {
+  INIT(token, ":");
+  ASSERT_EQ(token.type(), rasp::Token::JS_COLON);
+  END_SCAN;
+}
+
+
+TEST(ScannerTest, ScanPuncture_question_mark) {
+  INIT(token, "?");
+  ASSERT_EQ(token.type(), rasp::Token::JS_QUESTION_MARK);
+  END_SCAN;
+}

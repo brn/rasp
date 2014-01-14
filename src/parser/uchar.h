@@ -86,6 +86,7 @@ class UChar {
    */
   ALWAYS_INLINE explicit operator bool () const {return !IsInvalid();}
   ALWAYS_INLINE explicit operator UC16 () const {return uchar();}
+  ALWAYS_INLINE explicit operator UC8 () const {return ToUC8Ascii();}
   ALWAYS_INLINE explicit operator int () const {return uchar();}
   ALWAYS_INLINE explicit operator const char* () const {return utf8();}
   ALWAYS_INLINE bool operator == (const UChar& uc) const {
@@ -202,6 +203,13 @@ class UChar {
    */
   ALWAYS_INLINE char ToAscii() const {return static_cast<char>(uchar_);}
 
+
+  /**
+   * Return ascii UC8 char.
+   * @return ascii UC8 char.
+   */
+  ALWAYS_INLINE UC8 ToUC8Ascii() const {return static_cast<UC8>(uchar_);}
+  
 
   /**
    * Check whether utf-16 byte sequence is surrogate pair or not.

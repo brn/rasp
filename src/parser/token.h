@@ -35,7 +35,7 @@
 
 namespace rasp {
 enum class Token: uint16_t {
-  JS_BREAK,
+  JS_BREAK = 0,
   JS_CASE,
   JS_CATCH,
   JS_CLASS,
@@ -131,6 +131,14 @@ enum class Token: uint16_t {
   JS_SET,
   JS_GET,
   JS_REST_PARAMETER,
+  JS_LEFT_PAREN,
+  JS_RIGHT_PAREN,
+  JS_COLON,
+  JS_QUESTION_MARK,
+  JS_LEFT_BRACKET,
+  JS_RIGHT_BRACKET,
+  JS_LEFT_BRACE,
+  JS_RIGHT_BRACE,
   LINE_TERMINATOR,
   FUTURE_STRICT_RESERVED_WORD,
   FUTURE_RESERVED_WORD,
@@ -195,10 +203,14 @@ class TokenInfo {
   }
 
 
+#ifdef UNIT_TEST
   const char* ToString() const;
+#endif
   
 
   static Token GetIdentifierType(const char* maybe_keyword, bool es_harmony = false);
+
+  static Token GetPunctureType(const UChar& uchar);
   
  private:
   UtfString vector_;

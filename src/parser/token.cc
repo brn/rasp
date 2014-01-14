@@ -27,8 +27,212 @@
 #include "../utils/utils.h"
 #include "token.h"
 
+namespace rasp {
 
-const char* kTokenStringList[] = {
+
+static const Token kPunctures[] = {
+  Token::ILLEGAL,// 0
+  Token::ILLEGAL,// 1
+  Token::ILLEGAL,// 2
+  Token::ILLEGAL,// 3
+  Token::ILLEGAL,// 4
+  Token::ILLEGAL,// 5
+  Token::ILLEGAL,// 6
+  Token::ILLEGAL,// 7
+  Token::ILLEGAL,// 8
+  Token::ILLEGAL,// 9
+  Token::ILLEGAL,// 10
+  Token::ILLEGAL,// 11
+  Token::ILLEGAL,// 12
+  Token::ILLEGAL,// 13
+  Token::ILLEGAL,// 14
+  Token::ILLEGAL,// 15
+  Token::ILLEGAL,// 16
+  Token::ILLEGAL,// 17
+  Token::ILLEGAL,// 18
+  Token::ILLEGAL,// 19
+  Token::ILLEGAL,// 20
+  Token::ILLEGAL,// 21
+  Token::ILLEGAL,// 22
+  Token::ILLEGAL,// 23
+  Token::ILLEGAL,// 24
+  Token::ILLEGAL,// 25
+  Token::ILLEGAL,// 26
+  Token::ILLEGAL,// 27
+  Token::ILLEGAL,// 28
+  Token::ILLEGAL,// 29
+  Token::ILLEGAL,// 30
+  Token::ILLEGAL,// 31
+  Token::ILLEGAL,// 32
+  Token::ILLEGAL,// 33 !
+  Token::ILLEGAL,// 34 '
+  Token::ILLEGAL,// 35 #
+  Token::ILLEGAL,// 36 $
+  Token::ILLEGAL,// 37 %
+  Token::ILLEGAL,// 38 &
+  Token::ILLEGAL,// 39 '
+  Token::JS_LEFT_PAREN,// 40 (
+  Token::JS_RIGHT_PAREN,// 41 )
+  Token::ILLEGAL,// 42 *
+  Token::ILLEGAL,// 43 +
+  Token::ILLEGAL,// 44 ,
+  Token::ILLEGAL,// 45 -
+  Token::ILLEGAL,// 46 .
+  Token::ILLEGAL,// 47 /
+  Token::ILLEGAL,// 48 0
+  Token::ILLEGAL,// 49 1
+  Token::ILLEGAL,// 50 2
+  Token::ILLEGAL,// 51 3
+  Token::ILLEGAL,// 52 4
+  Token::ILLEGAL,// 53 5
+  Token::ILLEGAL,// 54 6
+  Token::ILLEGAL,// 55 7
+  Token::ILLEGAL,// 56 8
+  Token::ILLEGAL,// 57 9
+  Token::JS_COLON,// 58 :
+  Token::ILLEGAL,// 59 ;
+  Token::ILLEGAL,// 60 <
+  Token::ILLEGAL,// 61 =
+  Token::ILLEGAL,// 62 >
+  Token::JS_QUESTION_MARK,// 63 ?
+  Token::ILLEGAL,// 64 @
+  Token::ILLEGAL,// 65 A
+  Token::ILLEGAL,// 66 B
+  Token::ILLEGAL,// 67 C
+  Token::ILLEGAL,// 68 D
+  Token::ILLEGAL,// 69 E
+  Token::ILLEGAL,// 70 F
+  Token::ILLEGAL,// 71 G
+  Token::ILLEGAL,// 72 H
+  Token::ILLEGAL,// 73 I
+  Token::ILLEGAL,// 74 J
+  Token::ILLEGAL,// 75 K
+  Token::ILLEGAL,// 76 L
+  Token::ILLEGAL,// 77 M
+  Token::ILLEGAL,// 78 N
+  Token::ILLEGAL,// 79 O
+  Token::ILLEGAL,// 80 P
+  Token::ILLEGAL,// 81 Q
+  Token::ILLEGAL,// 82 R
+  Token::ILLEGAL,// 83 S
+  Token::ILLEGAL,// 84 T
+  Token::ILLEGAL,// 85 U
+  Token::ILLEGAL,// 86 V
+  Token::ILLEGAL,// 87 W
+  Token::ILLEGAL,// 88 X
+  Token::ILLEGAL,// 89 Y
+  Token::ILLEGAL,// 90 Z
+  Token::JS_LEFT_BRACKET,// 91 [
+  Token::ILLEGAL,// 92 BACK_SLASH
+  Token::JS_RIGHT_BRACKET,// 93 ]
+  Token::ILLEGAL,// 94 ^
+  Token::ILLEGAL,// 95 _
+  Token::ILLEGAL,// 96 `
+  Token::ILLEGAL,// 97 a
+  Token::ILLEGAL,// 98 b
+  Token::ILLEGAL,// 99 c
+  Token::ILLEGAL,// 100 d
+  Token::ILLEGAL,// 101 e
+  Token::ILLEGAL,// 102 f
+  Token::ILLEGAL,// 103 g
+  Token::ILLEGAL,// 104 h
+  Token::ILLEGAL,// 105 i
+  Token::ILLEGAL,// 106 j
+  Token::ILLEGAL,// 107 k
+  Token::ILLEGAL,// 108 l
+  Token::ILLEGAL,// 109 m
+  Token::ILLEGAL,// 110 n
+  Token::ILLEGAL,// 111 o
+  Token::ILLEGAL,// 112 p
+  Token::ILLEGAL,// 113 q
+  Token::ILLEGAL,// 114 r
+  Token::ILLEGAL,// 115 s
+  Token::ILLEGAL,// 116 t
+  Token::ILLEGAL,// 117 u
+  Token::ILLEGAL,// 118 v
+  Token::ILLEGAL,// 119 w
+  Token::ILLEGAL,// 120 x
+  Token::ILLEGAL,// 121 y
+  Token::ILLEGAL,// 122 z
+  Token::JS_LEFT_BRACE,// 123 {
+  Token::ILLEGAL,// 124 |
+  Token::JS_RIGHT_BRACE,// 125 }
+  Token::ILLEGAL,// 126 ~
+  Token::ILLEGAL // 127 DEL
+};
+
+
+
+#define KEYWORDS(KEYWORD_GROUP, KEYWORD)                                \
+  KEYWORD_GROUP('b')                                                    \
+  KEYWORD("break", Token::JS_BREAK)                                     \
+  KEYWORD_GROUP('c')                                                    \
+  KEYWORD("case", Token::JS_CASE)                                       \
+  KEYWORD("catch", Token::JS_CATCH)                                     \
+  KEYWORD("class", Token::FUTURE_RESERVED_WORD)                         \
+  KEYWORD("const", Token::JS_CONST)                                     \
+  KEYWORD("continue", Token::JS_CONTINUE)                               \
+  KEYWORD_GROUP('d')                                                    \
+  KEYWORD("debugger", Token::JS_DEBUGGER)                               \
+  KEYWORD("default", Token::JS_DEFAULT)                                 \
+  KEYWORD("delete", Token::JS_DELETE)                                   \
+  KEYWORD("do", Token::JS_DO)                                           \
+  KEYWORD_GROUP('e')                                                    \
+  KEYWORD("else", Token::JS_ELSE)                                       \
+  KEYWORD("enum", Token::FUTURE_RESERVED_WORD)                          \
+  KEYWORD("export", es_harmony? Token::JS_EXPORT: Token::FUTURE_RESERVED_WORD) \
+  KEYWORD("extends", Token::FUTURE_RESERVED_WORD)                       \
+  KEYWORD_GROUP('f')                                                    \
+  KEYWORD("false", Token::JS_FALSE)                                     \
+  KEYWORD("finally", Token::JS_FINALLY)                                 \
+  KEYWORD("for", Token::JS_FOR)                                         \
+  KEYWORD("function", Token::JS_FUNCTION)                               \
+  KEYWORD_GROUP('i')                                                    \
+  KEYWORD("if", Token::JS_IF)                                           \
+  KEYWORD("implements", Token::FUTURE_STRICT_RESERVED_WORD)             \
+  KEYWORD("import", es_harmony? Token::JS_IMPORT: Token::FUTURE_RESERVED_WORD) \
+  KEYWORD("in", Token::JS_IN)                                           \
+  KEYWORD("instanceof", Token::JS_INSTANCEOF)                           \
+  KEYWORD("interface", Token::FUTURE_STRICT_RESERVED_WORD)              \
+  KEYWORD_GROUP('l')                                                    \
+  KEYWORD("let", es_harmony? Token::JS_LET: Token::FUTURE_STRICT_RESERVED_WORD) \
+  KEYWORD_GROUP('n')                                                    \
+  KEYWORD("new", Token::JS_NEW)                                         \
+  KEYWORD("null", Token::JS_NULL)                                       \
+  KEYWORD_GROUP('N')                                                    \
+  KEYWORD("NaN", Token::JS_NAN)                                         \
+  KEYWORD_GROUP('p')                                                    \
+  KEYWORD("package", Token::FUTURE_STRICT_RESERVED_WORD)                \
+  KEYWORD("private", Token::FUTURE_STRICT_RESERVED_WORD)                \
+  KEYWORD("protected", Token::FUTURE_STRICT_RESERVED_WORD)              \
+  KEYWORD("public", Token::FUTURE_STRICT_RESERVED_WORD)                 \
+  KEYWORD_GROUP('r')                                                    \
+  KEYWORD("return", Token::JS_RETURN)                                   \
+  KEYWORD_GROUP('s')                                                    \
+  KEYWORD("static", Token::FUTURE_STRICT_RESERVED_WORD)                 \
+  KEYWORD("super", Token::FUTURE_RESERVED_WORD)                         \
+  KEYWORD("switch", Token::JS_SWITCH)                                   \
+  KEYWORD_GROUP('t')                                                    \
+  KEYWORD("this", Token::JS_THIS)                                       \
+  KEYWORD("throw", Token::JS_THROW)                                     \
+  KEYWORD("true", Token::JS_TRUE)                                       \
+  KEYWORD("try", Token::JS_TRY)                                         \
+  KEYWORD("typeof", Token::JS_TYPEOF)                                   \
+  KEYWORD_GROUP('u')                                                    \
+  KEYWORD("undefined", Token::JS_UNDEFINED)                             \
+  KEYWORD_GROUP('v')                                                    \
+  KEYWORD("var", Token::JS_VAR)                                         \
+  KEYWORD("void", Token::JS_VOID)                                       \
+  KEYWORD_GROUP('w')                                                    \
+  KEYWORD("while", Token::JS_WHILE)                                     \
+  KEYWORD("with", Token::JS_WITH)                                       \
+  KEYWORD_GROUP('y')                                                    \
+  KEYWORD("yield", Token::JS_YIELD)
+
+
+#ifdef UNIT_TEST
+const char* TokenInfo::ToString() const {
+  static const char* kTokenStringList[] = {
     "JS_BREAK",
     "JS_CASE",
     "JS_CATCH",
@@ -125,87 +329,24 @@ const char* kTokenStringList[] = {
     "JS_SET",
     "JS_GET",
     "JS_REST_PARAMETER",
+    "JS_LEFT_PAREN",
+    "JS_RIGHT_PAREN",
+    "JS_COLON",
+    "JS_QUESTION_MARK",
+    "JS_LEFT_BRACKET",
+    "JS_RIGHT_BRACKET",
+    "JS_LEFT_BRACE",
+    "JS_RIGHT_BRACE",
     "LINE_TERMINATOR",
     "FUTURE_STRICT_RESERVED_WORD",
     "FUTURE_RESERVED_WORD",
     "END_OF_INPUT",
     "ILLEGAL"
   };
-
-
-
-#define KEYWORDS(KEYWORD_GROUP, KEYWORD)                                \
-  KEYWORD_GROUP('b')                                                    \
-  KEYWORD("break", Token::JS_BREAK)                                     \
-  KEYWORD_GROUP('c')                                                    \
-  KEYWORD("case", Token::JS_CASE)                                       \
-  KEYWORD("catch", Token::JS_CATCH)                                     \
-  KEYWORD("class", Token::FUTURE_RESERVED_WORD)                         \
-  KEYWORD("const", Token::JS_CONST)                                     \
-  KEYWORD("continue", Token::JS_CONTINUE)                               \
-  KEYWORD_GROUP('d')                                                    \
-  KEYWORD("debugger", Token::JS_DEBUGGER)                               \
-  KEYWORD("default", Token::JS_DEFAULT)                                 \
-  KEYWORD("delete", Token::JS_DELETE)                                   \
-  KEYWORD("do", Token::JS_DO)                                           \
-  KEYWORD_GROUP('e')                                                    \
-  KEYWORD("else", Token::JS_ELSE)                                       \
-  KEYWORD("enum", Token::FUTURE_RESERVED_WORD)                          \
-  KEYWORD("export", es_harmony? Token::JS_EXPORT: Token::FUTURE_RESERVED_WORD) \
-  KEYWORD("extends", Token::FUTURE_RESERVED_WORD)                       \
-  KEYWORD_GROUP('f')                                                    \
-  KEYWORD("false", Token::JS_FALSE)                                     \
-  KEYWORD("finally", Token::JS_FINALLY)                                 \
-  KEYWORD("for", Token::JS_FOR)                                         \
-  KEYWORD("function", Token::JS_FUNCTION)                               \
-  KEYWORD_GROUP('i')                                                    \
-  KEYWORD("if", Token::JS_IF)                                           \
-  KEYWORD("implements", Token::FUTURE_STRICT_RESERVED_WORD)             \
-  KEYWORD("import", es_harmony? Token::JS_IMPORT: Token::FUTURE_RESERVED_WORD) \
-  KEYWORD("in", Token::JS_IN)                                           \
-  KEYWORD("instanceof", Token::JS_INSTANCEOF)                           \
-  KEYWORD("interface", Token::FUTURE_STRICT_RESERVED_WORD)              \
-  KEYWORD_GROUP('l')                                                    \
-  KEYWORD("let", es_harmony? Token::JS_LET: Token::FUTURE_STRICT_RESERVED_WORD) \
-  KEYWORD_GROUP('n')                                                    \
-  KEYWORD("new", Token::JS_NEW)                                         \
-  KEYWORD("null", Token::JS_NULL)                                       \
-  KEYWORD_GROUP('N')                                                    \
-  KEYWORD("NaN", Token::JS_NAN)                                         \
-  KEYWORD_GROUP('p')                                                    \
-  KEYWORD("package", Token::FUTURE_STRICT_RESERVED_WORD)                \
-  KEYWORD("private", Token::FUTURE_STRICT_RESERVED_WORD)                \
-  KEYWORD("protected", Token::FUTURE_STRICT_RESERVED_WORD)              \
-  KEYWORD("public", Token::FUTURE_STRICT_RESERVED_WORD)                 \
-  KEYWORD_GROUP('r')                                                    \
-  KEYWORD("return", Token::JS_RETURN)                                   \
-  KEYWORD_GROUP('s')                                                    \
-  KEYWORD("static", Token::FUTURE_STRICT_RESERVED_WORD)                 \
-  KEYWORD("super", Token::FUTURE_RESERVED_WORD)                         \
-  KEYWORD("switch", Token::JS_SWITCH)                                   \
-  KEYWORD_GROUP('t')                                                    \
-  KEYWORD("this", Token::JS_THIS)                                       \
-  KEYWORD("throw", Token::JS_THROW)                                     \
-  KEYWORD("true", Token::JS_TRUE)                                       \
-  KEYWORD("try", Token::JS_TRY)                                         \
-  KEYWORD("typeof", Token::JS_TYPEOF)                                   \
-  KEYWORD_GROUP('u')                                                    \
-  KEYWORD("undefined", Token::JS_UNDEFINED)                             \
-  KEYWORD_GROUP('v')                                                    \
-  KEYWORD("var", Token::JS_VAR)                                         \
-  KEYWORD("void", Token::JS_VOID)                                       \
-  KEYWORD_GROUP('w')                                                    \
-  KEYWORD("while", Token::JS_WHILE)                                     \
-  KEYWORD("with", Token::JS_WITH)                                       \
-  KEYWORD_GROUP('y')                                                    \
-  KEYWORD("yield", Token::JS_YIELD)
-
-
-namespace rasp {
-
-const char* TokenInfo::ToString() const {
   return kTokenStringList[static_cast<uint16_t>(type_)];
 }
+#endif
+
 
 Token TokenInfo::GetIdentifierType(const char* maybe_keyword, bool es_harmony) {
   const int input_length = Strlen(maybe_keyword);
@@ -218,28 +359,33 @@ Token TokenInfo::GetIdentifierType(const char* maybe_keyword, bool es_harmony) {
   switch (maybe_keyword[0]) {
     default:
 #define KEYWORD_GROUP_CASE(ch)                  \
-      break;                                      \
+      break;                                    \
     case ch:
-#define KEYWORD(keyword, token)                               \
-    {                                                         \
-      const int keyword_length = sizeof(keyword) - 1;                   \
-      static_assert(keyword_length >= min_length, "The length of the keyword must be greater than 2"); \
-      static_assert(keyword_length <= max_length, "The length of the keyword mst be less than 10"); \
-      if (input_length == keyword_length &&                           \
-          maybe_keyword[1] == keyword[1] &&                           \
-          (keyword_length <= 2 || maybe_keyword[2] == keyword[2]) &&  \
-          (keyword_length <= 3 || maybe_keyword[3] == keyword[3]) &&  \
-          (keyword_length <= 4 || maybe_keyword[4] == keyword[4]) &&  \
-          (keyword_length <= 5 || maybe_keyword[5] == keyword[5]) &&  \
-          (keyword_length <= 6 || maybe_keyword[6] == keyword[6]) &&  \
-          (keyword_length <= 7 || maybe_keyword[7] == keyword[7]) &&  \
-          (keyword_length <= 8 || maybe_keyword[8] == keyword[8]) &&  \
-          (keyword_length <= 9 || maybe_keyword[9] == keyword[9])) {  \
-        return token;                                                 \
-      }                                                               \
-    }
-    KEYWORDS(KEYWORD_GROUP_CASE, KEYWORD)
-  }
+#define KEYWORD(keyword, token)                                         \
+      {                                                                 \
+        const int keyword_length = sizeof(keyword) - 1;                 \
+        static_assert(keyword_length >= min_length, "The length of the keyword must be greater than 2"); \
+        static_assert(keyword_length <= max_length, "The length of the keyword mst be less than 10"); \
+        if (input_length == keyword_length &&                           \
+            maybe_keyword[1] == keyword[1] &&                           \
+            (keyword_length <= 2 || maybe_keyword[2] == keyword[2]) &&  \
+            (keyword_length <= 3 || maybe_keyword[3] == keyword[3]) &&  \
+            (keyword_length <= 4 || maybe_keyword[4] == keyword[4]) &&  \
+            (keyword_length <= 5 || maybe_keyword[5] == keyword[5]) &&  \
+            (keyword_length <= 6 || maybe_keyword[6] == keyword[6]) &&  \
+            (keyword_length <= 7 || maybe_keyword[7] == keyword[7]) &&  \
+            (keyword_length <= 8 || maybe_keyword[8] == keyword[8]) &&  \
+            (keyword_length <= 9 || maybe_keyword[9] == keyword[9])) {  \
+          return token;                                                 \
+        }                                                               \
+      }
+      KEYWORDS(KEYWORD_GROUP_CASE, KEYWORD)
+          }
   return Token::JS_IDENTIFIER;
+}
+
+
+Token TokenInfo::GetPunctureType(const UChar& uchar) {
+  return kPunctures[uchar.ToUC8Ascii()];
 }
 }
