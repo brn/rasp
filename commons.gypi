@@ -121,7 +121,7 @@
           'gcc_version%': '<!(python gcc_version.py)>)',
         },
         'cflags': [ '-Wall' ],
-        'cflags_cc': [ '-fno-rtti', '-fno-exceptions' ],
+        'cflags_cc': [ '-fno-rtti', '-fno-operator-names'],
         'conditions': [
           [ 'host_arch != target_arch and target_arch=="ia32"', {
             'cflags': [ '-m32' ],
@@ -159,7 +159,8 @@
           'PREBINDING': 'NO',                       # No -Wl,-prebind
           'USE_HEADERMAP': 'NO',
           'OTHER_CFLAGS': [
-            '-fno-strict-aliasing'
+            '-fno-strict-aliasing',
+            '-fno-operator-names'
           ],
           'WARNING_CFLAGS': [
             '-Wall',

@@ -34,12 +34,19 @@ namespace rasp {
 /**
  * Inline macro.
  */
-#ifdef _WIN32
+#if !defined(DEBUG) && defined(_MSC_VER)
+#define ALWAYS_INLINE inline __forceinline
+#elif !defined(DEBUG) && defined(__GNUC__)
+#define ALWAYS_INLINE inline __attribute__((always_inline))
+#else
 #define ALWAYS_INLINE inline
-#elif defined(__GNUC__)
-#define ALWAYS_INLINE inline __attribute__((always_inline));
 #endif
 
+#if defined(__GNUC__)
+#define NOEXCEPT noexcept
+#else
+#define NOEXCEPT
+#endif
 
 /**
  * Class traits.

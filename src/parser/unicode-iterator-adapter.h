@@ -140,7 +140,7 @@ class UnicodeIteratorAdapter : public std::iterator<std::forward_iterator_tag, U
   /**
    * Advance iterator.
    */
-  inline void UnicodeIteratorAdapter::Advance() {
+  inline void Advance() {
     UC8 next = *begin_;
     auto byte_count = utf8::GetByteCount(next);
     if (next == '\n') {

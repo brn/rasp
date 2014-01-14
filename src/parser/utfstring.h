@@ -44,10 +44,24 @@ class UtfValueCache {
         utf16_value_(utf_value_cache.utf16_value_) {}
 
   
-  UtfValueCache(UtfValueCache&& utf_value_cache)
+  UtfValueCache(UtfValueCache&& utf_value_cache) NOEXCEPT
       : utf8_value_(std::move(utf_value_cache.utf8_value_)),
         utf16_value_(std::move(utf_value_cache.utf16_value_)) {}
 
+
+  UtfValueCache& operator = (UtfValueCache&& utf_value_cache) {
+    utf8_value_ = std::move(utf_value_cache.utf8_value_);
+    utf16_value_ = std::move(utf_value_cache.utf16_value_);
+    return (*this);
+  }
+
+
+  UtfValueCache& operator = (const UtfValueCache& utf_value_cache) {
+    utf8_value_ = utf_value_cache.utf8_value_;
+    utf16_value_ = utf_value_cache.utf16_value_;
+    return (*this);
+  }
+  
   
   ALWAYS_INLINE void append_utf8_value(const char* utf8) {
     utf8_value_.append(utf8);
@@ -226,4 +240,4 @@ class UtfString {
 
 } //namespace rasp
 
-#endif PARSER_UCHAR_VECTOR_H_
+#endif

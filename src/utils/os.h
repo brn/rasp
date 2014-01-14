@@ -28,6 +28,7 @@
 #include <errno.h>
 #include <string>
 #include <stdexcept>
+#include <stdlib.h>
 
 #ifdef _WIN32
 #define K_ERRNO _doserrno
@@ -36,19 +37,6 @@
 #endif
 
 namespace rasp {
-class FileIOException : public std::exception {
- public:
-  FileIOException(const char* message)
-      : message_(message){}
-
-  FileIOException(FileIOException&& e)
-      : message_(std::move(e.message_)) {}
-  const char* what() const {return message_.c_str();}
-
- private:
-  std::string message_;
-};
-
 
 void Strerror(std::string* buf, int err);
 void Printf(const char* format, ...);
@@ -71,6 +59,40 @@ FILE* POpen(const char* name, const char* mode);
 void PClose(FILE* fp);
 char* Strdup(const char* path);
 void Strcpy(char* dest, const char* src, size_t length);
+
+
+class FileIOException : public std::exception {
+ public:
+  FileIOException(const char* message)
+      : std::exception() {
+    message_ = Strdup(message);
+  }
+
+  FileIOException(FileIOException&& e) {
+    if (message_ != nullptr) {
+      free(reinterpret_cast<void*>(message_));
+      message_ = nullptr;
+    }
+    message_ = Strdup(e.message_);
+    if (e.message_ != nullptr) {
+      free(reinterpret_cast<void*>(e.message_));
+      e.message_ = nullptr;
+    }
+  }
+
+
+  ~FileIOException() {
+    if (message_ != nullptr) {
+      free(reinterpret_cast<void*>(message_));
+    }
+  }
+  
+  
+  const char* what() const throw() {return message_;}
+
+ private:
+  char* message_ = nullptr;
+};
 }
 
 #endif

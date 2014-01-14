@@ -26,9 +26,13 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <assert.h>
+#ifdef _WIN32
 #include <sys/utime.h>
-#include <time.h>
 #include <windows.h>
+#else
+#include <utime.h>
+#endif
+#include <time.h>
 #include "os.h"
 #include "utils.h"
 

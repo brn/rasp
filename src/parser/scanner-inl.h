@@ -413,7 +413,7 @@ bool Scanner<InputSourceIterator>::ScanAsciiEscapeSequence(UtfString* v) {
     Illegal();
     return false;
   }
-  UC8Bytes bytes{{uc8, '\0'}};
+  UC8Bytes bytes{{static_cast<char>(uc8), '\0'}};
   (*v) += UChar(uc8, bytes);
   return true;
 }

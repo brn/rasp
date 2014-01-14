@@ -44,7 +44,7 @@ SourceStream::SourceStream(const char* filepath)
       FILE* fp = FOpen(filepath, "rb");
       ReadBlock(fp);
       FClose(fp);
-    } catch (FileIOException&& e) {
+    } catch (const FileIOException& e) {
       Fail() << kCantOpenInput << filepath
              << "\nbecause: " << e.what();
     }

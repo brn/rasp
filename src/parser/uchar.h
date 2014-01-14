@@ -119,7 +119,7 @@ class UChar {
 
 
   inline const UChar operator + (const UC8 uc) const {
-    UC8 next = unicode::u8(ToAscii() + uc);
+    char next = ToAscii() + static_cast<char>(uc);
     UC8Bytes b{{next, '\0'}};
     return UChar(next, b);
   }
@@ -130,7 +130,7 @@ class UChar {
     if (c < uc) {
       throw std::out_of_range("Attempted to subtract by invalid ascii character.");
     }
-    UC8 next = unicode::u8(ToAscii() - uc);
+    char next = ToAscii() - static_cast<char>(uc);
     UC8Bytes b{{next, '\0'}};
     return UChar(next, b);
   }

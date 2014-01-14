@@ -43,12 +43,12 @@ if __name__ == '__main__':
   if  additional_include :
     args.append('-Dadditional_include=' + additional_include)
   else :
-    additional_include = ""
+    args.append('-Dadditional_include=""')
   
   if additional_lib :
     args.append('-Dadditional_lib=' + additional_lib)
   else :
-    additional_lib = ''
+    args.append('-Dadditional_lib=""')
     
   # There's a bug with windows which doesn't allow this feature.
   if sys.platform != 'win32':
