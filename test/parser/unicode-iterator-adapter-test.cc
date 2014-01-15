@@ -32,7 +32,7 @@
 
 ::testing::AssertionResult Failed(const rasp::UChar& uchar, const rasp::UnicodeIteratorAdapter<std::string::iterator>& un) {
   return ::testing::AssertionFailure() << "Invalid unicode charactor. at: " << un.current_position()
-                                       << " value: " + uchar.uchar();
+                                       << " value: " << uchar.uchar();
 }
 
 
@@ -69,7 +69,7 @@ inline void UnicodeTest(const char* input, const char* expected, size_t expected
   auto end = source.end();
   rasp::UnicodeIteratorAdapter<std::string::iterator> un(source.begin());
   int index = 0;
-  int size = 0;
+  size_t size = 0;
   for (;un != end; std::advance(un, 1)) {
     const rasp::UChar uc = *un;
     ASSERT_TRUE(IsValid(uc, un));
