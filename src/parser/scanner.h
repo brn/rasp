@@ -49,16 +49,38 @@ class Scanner {
   const TokenInfo& Scan();
 
 
-  ALWAYS_INLINE bool has_line_terminator_before_next() const {
+  RASP_INLINE bool has_line_terminator_before_next() RASP_NO_SE {
     return has_line_terminator_before_next_;
   }
   
   
-  ALWAYS_INLINE const char* message() const {
+  RASP_INLINE const char* message() const {
     return message_.c_str();
   }
 
- private:  
+  
+  RASP_INLINE const UtfString& last_multi_line_comment() RASP_NO_SE {
+    return last_multi_line_comment_;
+  }
+
+
+  RASP_INLINE size_t current_position() RASP_NO_SE {
+    return current_position_;
+  }
+
+  
+  RASP_INLINE size_t line_number() RASP_NO_SE {
+    return line_number_;
+  }
+  
+ private:
+
+  void LineFeed() {
+    line_number_++;
+    current_position_ = 1;
+  }
+  
+  
   /**
    * Scan string literal.
    */
@@ -91,15 +113,18 @@ class Scanner {
 
 
   void ScanBinaryLiteral();
-
+  
   
   bool ScanUnicodeEscapeSequence(UtfString*);
+
+
+  bool ConsumeLineBreak();
 
 
   UC16 ScanHexEscape(const UChar& uchar, int len, bool* success);
   
 
-  ALWAYS_INLINE void ScanLogicalOperator(Token type1, Token type2, Token type3) {
+  void ScanLogicalOperator(Token type1, Token type2, Token type3) {
     if (lookahead1_ == char_) {
       return BuildToken(type1);
     }
@@ -121,7 +146,7 @@ class Scanner {
 
 
   template <typename T>
-  ALWAYS_INLINE int ToHexValue(const T& uchar) const {
+  int ToHexValue(const T& uchar) const {
     int ret = 0;
     if (uchar >= unicode::u8('0') && uchar <= unicode::u8('9')) {
       ret = static_cast<int>(uchar - unicode::u8('0'));
@@ -136,29 +161,81 @@ class Scanner {
   }
   
 
-  ALWAYS_INLINE bool IsEnd() const {
+  RASP_INLINE bool IsEnd() const {
     return it_ == end_;
   }
 
   
-  ALWAYS_INLINE void SkipWhiteSpace() {
-    has_line_terminator_before_next_ = false;
-    while(Character::IsWhiteSpace(char_) || char_ == unicode::u8(';')) {
-      if (char_ == unicode::u8('\n') || char_ == unicode::u8(';')) {
+  bool SkipWhiteSpace() {
+    bool skip = false;
+    while(Character::IsWhiteSpace(char_, lookahead1_) || char_ == unicode::u8(';') ||
+          Character::IsSingleLineCommentStart(char_, lookahead1_) ||
+          Character::IsMultiLineCommentStart(char_, lookahead1_)) {
+      if (Character::GetLineBreakType(char_, lookahead1_) != Character::LineBreakType::NONE ||
+          char_ == unicode::u8(';')) {
         has_line_terminator_before_next_ = true;
       }
-      Advance();
+      skip = true;
+      if (!ConsumeLineBreak() && !SkipSingleLineComment() && !SkipMultiLineComment()) {
+        Advance();
+      }
     }
+    return skip;
+  }
+
+
+  bool SkipSingleLineComment() {
+    bool skip = false;
+    if (Character::IsSingleLineCommentStart(char_, lookahead1_)) {
+      while (char_ != unicode::u8('\0') &&
+             Character::GetLineBreakType(char_, lookahead1_) == Character::LineBreakType::NONE) {
+        Advance();
+      }
+      skip = true;
+    }
+    return skip;
+  }
+
+
+  bool SkipMultiLineComment() {
+    bool skip = false;
+    if (Character::IsMultiLineCommentStart(char_, lookahead1_)) {
+      UtfString str;
+      while (!Character::IsMultiLineCommentEnd(char_, lookahead1_)) {
+        Character::LineBreakType lt = Character::GetLineBreakType(char_, lookahead1_);
+        if (lt != Character::LineBreakType::NONE) {
+          LineFeed();
+          has_line_terminator_before_next_ = true;
+        }
+
+        if (lt == Character::LineBreakType::CRLF) {
+          str += char_;
+          Advance();
+          str += char_;
+          Advance();          
+        } else {
+          str += char_;
+          Advance();
+        }
+      }
+      str += char_;
+      Advance();
+      str += char_;
+      Advance();
+      skip = true;
+      last_multi_line_comment_ = std::move(str);
+    }
+    return skip;
   }
   
 
-  ALWAYS_INLINE void UpdateTokenInfo() {
+  void UpdateTokenInfo() {
     token_info_.set_start_col(current_position());
     token_info_.set_line_number(line_number());
   }
   
 
-  ALWAYS_INLINE void Error(const char* message) {
+  void Error(const char* message) {
     UpdateTokenInfo();
     token_info_.set_type(Token::ILLEGAL);
     std::stringstream str;
@@ -166,35 +243,25 @@ class Scanner {
   }
 
 
-  ALWAYS_INLINE void Illegal() {
+  RASP_INLINE void Illegal() {
     return Error("Illegal token.");
   }
+  
 
-
-  ALWAYS_INLINE void BuildToken(Token type, UtfString utf_string) {
+  void BuildToken(Token type, UtfString utf_string) {
     UpdateTokenInfo();
     token_info_.set_value(std::move(utf_string));
     token_info_.set_type(type);
   }
 
 
-  ALWAYS_INLINE void BuildToken(Token type) {
+  void BuildToken(Token type) {
     UpdateTokenInfo();
     token_info_.set_type(type);
   }
   
 
   void Advance();
-
-
-  ALWAYS_INLINE size_t current_position() const {
-    return current_position_;
-  }
-
-  
-  ALWAYS_INLINE size_t line_number() const {
-    return line_number_;
-  }
 
   
   bool has_line_terminator_before_next_;
@@ -206,6 +273,7 @@ class Scanner {
   TokenInfo token_info_;
   UChar char_;
   UChar lookahead1_;
+  UtfString last_multi_line_comment_;
   std::string message_;
   const CompilerOption& compiler_option_;
 };

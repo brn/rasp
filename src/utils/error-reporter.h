@@ -39,23 +39,23 @@ namespace rasp {
 class ErrorReporter {
  public:
   
-  ALWAYS_INLINE ErrorReporter(const char* message)
+  RASP_INLINE ErrorReporter(const char* message)
       : message_(message){}
   
 
-  ALWAYS_INLINE ErrorReporter(const std::string& message):
+  RASP_INLINE ErrorReporter(const std::string& message):
       message_(std::move(message)){}
 
 
-  ALWAYS_INLINE ErrorReporter(const ErrorReporter& e)
+  RASP_INLINE ErrorReporter(const ErrorReporter& e)
       : message_(e.message_){}
 
 
-  ALWAYS_INLINE ErrorReporter(const ErrorReporter&& e)
+  RASP_INLINE ErrorReporter(const ErrorReporter&& e)
       : message_(std::move(e.message_)){}
 
   
-  ALWAYS_INLINE void Report(bool is_exit = false) {
+  RASP_INLINE void Report(bool is_exit = false) {
     std::cerr << message_ << std::endl;
     if (is_exit) exit(1);
   }
@@ -67,24 +67,24 @@ class ErrorReporter {
 
 class MaybeFail {
  public:
-  ALWAYS_INLINE MaybeFail()
+  RASP_INLINE MaybeFail()
       : success_(true){}
   
   virtual ~MaybeFail() = default;
 
   
-  ALWAYS_INLINE bool success() const {
+  RASP_INLINE bool success() const {
     return success_;
   }
 
 
-  ALWAYS_INLINE std::stringstream& Fail() {
+  RASP_INLINE std::stringstream& Fail() {
     success_ = false;
     return message_stream_;
   }
 
   
-  ALWAYS_INLINE std::string failed_message() const {
+  RASP_INLINE std::string failed_message() const {
     return message_stream_.str();
   }
   

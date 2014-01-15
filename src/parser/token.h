@@ -163,42 +163,42 @@ class TokenInfo {
   ~TokenInfo() = default;
 
 
-  ALWAYS_INLINE void set_value(UtfString&& vector) {
+  RASP_INLINE void set_value(UtfString&& vector) {
     vector_ = std::move(vector);
   }
   
   
-  ALWAYS_INLINE const UtfString& value() const {
+  RASP_INLINE const UtfString& value() const {
     return vector_;
   }
 
 
-  ALWAYS_INLINE void set_type(Token type) {
+  RASP_INLINE void set_type(Token type) {
     type_ = type;
   }
   
   
-  ALWAYS_INLINE Token type() const {
+  RASP_INLINE Token type() const {
     return type_;
   }
 
 
-  ALWAYS_INLINE void set_start_col(size_t start_col) {
+  RASP_INLINE void set_start_col(size_t start_col) {
     start_col_ = start_col;
   }
   
   
-  ALWAYS_INLINE size_t start_col() const {
+  RASP_INLINE size_t start_col() const {
     return start_col_;
   }
 
 
-  ALWAYS_INLINE void set_line_number(size_t line_number) {
+  RASP_INLINE void set_line_number(size_t line_number) {
     line_number_ = line_number;
   }
   
   
-  ALWAYS_INLINE size_t line_number() const {
+  RASP_INLINE size_t line_number() const {
     return line_number_;
   }
 

@@ -41,19 +41,19 @@ class SourceStream : public MaybeFail, private Uncopyable {
   typedef std::string::iterator iterator;
   SourceStream(const char* filepath);
 
-  ALWAYS_INLINE ~SourceStream() = default;
+  RASP_INLINE ~SourceStream() = default;
   
   
-  ALWAYS_INLINE iterator begin() {return buffer_.begin();}
+  RASP_INLINE iterator begin() {return buffer_.begin();}
   
 
-  ALWAYS_INLINE iterator end() {return buffer_.end();}
+  RASP_INLINE iterator end() {return buffer_.end();}
 
 
-  ALWAYS_INLINE const char* buffer() {return buffer_.c_str();}
+  RASP_INLINE const char* buffer() {return buffer_.c_str();}
 
 
-  ALWAYS_INLINE size_t size() const {return size_;}
+  RASP_INLINE size_t size() const {return size_;}
 
 
  private:

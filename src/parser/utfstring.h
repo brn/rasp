@@ -31,6 +31,7 @@
 #include "./uchar.h"
 #include "../utils/unicode.h"
 #include "../utils/utils.h"
+#include "unicode-iterator-adapter.h"
 
 namespace rasp {
 
@@ -44,7 +45,7 @@ class UtfValueCache {
         utf16_value_(utf_value_cache.utf16_value_) {}
 
   
-  UtfValueCache(UtfValueCache&& utf_value_cache) NOEXCEPT
+  UtfValueCache(UtfValueCache&& utf_value_cache) RASP_NOEXCEPT
       : utf8_value_(std::move(utf_value_cache.utf8_value_)),
         utf16_value_(std::move(utf_value_cache.utf16_value_)) {}
 
@@ -63,29 +64,35 @@ class UtfValueCache {
   }
   
   
-  ALWAYS_INLINE void append_utf8_value(const char* utf8) {
+  RASP_INLINE void append_utf8_value(const char* utf8) {
     utf8_value_.append(utf8);
   }
 
 
-  ALWAYS_INLINE const Utf8String& utf8_value() const {
+  RASP_INLINE const Utf8String& utf8_value() RASP_NO_SE {
     return utf8_value_;
   }
   
 
-  ALWAYS_INLINE void append_utf16_value(const UC16 uc) {
+  RASP_INLINE void append_utf16_value(const UC16 uc) {
     utf16_value_.append(1, uc);
   }
 
 
-  ALWAYS_INLINE const Utf16String& utf16_value() const {
+  RASP_INLINE const Utf16String& utf16_value() const {
     return utf16_value_;
   }
 
 
-  ALWAYS_INLINE void Append(const Utf8String& utf8_value, const Utf16String& utf16_value) {
+  RASP_INLINE void Append(const Utf8String& utf8_value, const Utf16String& utf16_value) {
     utf8_value_.append(utf8_value);
     utf16_value_.append(utf16_value);
+  }
+
+
+  RASP_INLINE void Clear() {
+    utf8_value_.clear();
+    utf16_value_.clear();
   }
   
   
@@ -107,12 +114,12 @@ class Utf8Value {
         size_(uv.size_){}
 
   
-  ALWAYS_INLINE const char* value() const {
+  RASP_INLINE const char* value() RASP_NO_SE {
     return utf8_;
   }
 
   
-  ALWAYS_INLINE size_t size() const {
+  RASP_INLINE size_t size() RASP_NO_SE {
     return size_;
   }
   
@@ -134,12 +141,12 @@ class Utf16Value {
         size_(uv.size_){}
 
   
-  ALWAYS_INLINE const UC16* value() const {
+  RASP_INLINE const UC16* value() const {
     return utf16_;
   }
 
   
-  ALWAYS_INLINE size_t size() const {
+  RASP_INLINE size_t size() const {
     return size_;
   }
   
@@ -150,9 +157,25 @@ class Utf16Value {
 
 
 class UtfString {
- public:  
+ public:
   UtfString() = default;
+  
+  
+  UtfString(const char* source) {
+    std::string st(source);
+    Initialize(st);
+  }
 
+
+  UtfString(const std::string& source) {
+    Initialize(source);
+  }
+
+
+  UtfString(std::string&& source) {
+    Initialize(source);
+  }
+  
   
   ~UtfString() = default;
 
@@ -164,6 +187,22 @@ class UtfString {
   UtfString(UtfString&& utf_string)
       : utf_value_cache_(std::move(utf_string.utf_value_cache_)){}
 
+
+  void Initialize(const std::string& str) {
+    typedef std::string::const_iterator Iterator;
+    Iterator end = str.end();
+    UnicodeIteratorAdapter<Iterator> it(str.begin());
+    while (it != end) {
+      (*this) += *it;
+      ++it;
+    }
+  }
+
+
+  RASP_INLINE void Clear() {
+    utf_value_cache_.Clear();
+  }
+  
 
   inline UtfString& operator = (UtfString&& utf_string) {
     utf_value_cache_ = std::move(utf_string.utf_value_cache_);
@@ -202,22 +241,22 @@ class UtfString {
   }
 
 
-  ALWAYS_INLINE Utf8Value ToUtf8Value() const {
+  RASP_INLINE Utf8Value ToUtf8Value() const {
     return Utf8Value(utf_value_cache_.utf8_value().c_str(), utf8_length());
   };
 
 
-  ALWAYS_INLINE Utf16Value ToUtf16Value() const {
+  RASP_INLINE Utf16Value ToUtf16Value() const {
     return Utf16Value(utf_value_cache_.utf16_value().c_str(), utf16_length());
   };
 
 
-  ALWAYS_INLINE size_t utf8_length() const {
+  RASP_INLINE size_t utf8_length() const {
     return utf_value_cache_.utf8_value().size();
   }
 
 
-  ALWAYS_INLINE size_t utf16_length() const {
+  RASP_INLINE size_t utf16_length() const {
     return utf_value_cache_.utf16_value().size();
   }
   
@@ -232,9 +271,8 @@ class UtfString {
       utf_value_cache_.append_utf16_value(uchar.uchar());
     }
   }
+
   
-  size_t utf8_length_;
-  size_t utf16_length_;
   UtfValueCache utf_value_cache_;
 };
 

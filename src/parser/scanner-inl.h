@@ -42,7 +42,10 @@ Scanner<InputSourceIterator>::Scanner(InputSourceIterator it,
       line_number_(1),
       it_(it),
       end_(end),
-      compiler_option_(compiler_option){}
+      compiler_option_(compiler_option) {
+  Advance();
+  SkipWhiteSpace();
+}
 
 
 template<typename InputSourceIterator>
@@ -56,11 +59,6 @@ void Scanner<InputSourceIterator>::Advance()  {
   current_position_++;
   ++it_;
   
-  if (char_ == unicode::u8('\n')) {
-    line_number_++;
-    current_position_ = 1;
-  }
-  
   if (it_ == end_) {
     lookahead1_ = UChar::Null();
     return;
@@ -71,8 +69,9 @@ void Scanner<InputSourceIterator>::Advance()  {
 
 template<typename InputSourceIterator>
 const TokenInfo& Scanner<InputSourceIterator>::Scan() {
-  Advance();
-
+  has_line_terminator_before_next_ = false;
+  last_multi_line_comment_.Clear();
+  
   if (!char_.IsAscii()) {
     Illegal();
     return token_info_;
@@ -96,7 +95,10 @@ const TokenInfo& Scanner<InputSourceIterator>::Scan() {
   } else {
     Illegal();
   }
-  SkipWhiteSpace();
+
+  if (!SkipWhiteSpace()) {
+    Advance();
+  }
   return token_info_;
 }
 
@@ -423,6 +425,26 @@ bool Scanner<InputSourceIterator>::ScanAsciiEscapeSequence(UtfString* v) {
   UC8Bytes bytes{{static_cast<char>(uc8), '\0'}};
   (*v) += UChar(uc8, bytes);
   return true;
+}
+
+
+template <typename InputSourceIterator>
+bool Scanner<InputSourceIterator>::ConsumeLineBreak() {
+  bool is_break = false;
+  Character::LineBreakType lt = Character::GetLineBreakType(char_, lookahead1_);
+  if (lt == Character::LineBreakType::CRLF) {
+    Advance();
+    Advance();
+    is_break = true;
+  } else if (lt == Character::LineBreakType::LF ||
+             lt == Character::LineBreakType::CR) {
+    Advance();
+    is_break = true;
+  }
+  if (is_break) {
+    LineFeed();
+  }
+  return is_break;
 }
 
 } //namespace rasp

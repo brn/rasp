@@ -34,14 +34,21 @@ namespace rasp {
 class Character : private Static {
  public:
 
-  static bool IsWhiteSpace(const UChar& uchar) {
+  enum class LineBreakType : uint8_t {
+    LF = 0,
+    CR,
+    CRLF,
+    NONE
+  };
+  
+  static bool IsWhiteSpace(const UChar& uchar, const UChar& lookahead) {
     return uchar.IsAscii() &&
         (uchar == unicode::u8(0x09) ||
          uchar == unicode::u8(0x0b) ||
          uchar == unicode::u8(0x0c) ||
          uchar == unicode::u8(0x20) ||
          uchar == unicode::u8(255) ||
-         uchar == unicode::u8('\n') ||
+         GetLineBreakType(uchar, lookahead) != LineBreakType::NONE ||
          uchar == unicode::u32(0x2028) ||
          uchar == unicode::u32(0x1680) ||
          uchar == unicode::u32(0x180E) ||
@@ -54,12 +61,12 @@ class Character : private Static {
   }
 
 
-  ALWAYS_INLINE static bool IsPuncture(const UChar& uchar) {
+  RASP_INLINE static bool IsPuncture(const UChar& uchar) {
     return GetCharType(uchar.ToUC8Ascii()) == CharType::PUNCTURES;
   }
   
 
-  ALWAYS_INLINE static bool IsOperatorStart(const UChar& uchar) {
+  RASP_INLINE static bool IsOperatorStart(const UChar& uchar) {
     return GetCharType(uchar.ToUC8Ascii()) == CharType::OPERATORS;
   }
 
@@ -83,7 +90,7 @@ class Character : private Static {
   }
 
 
-  ALWAYS_INLINE static bool IsIdentifierStart(const UChar& uchar) {
+  RASP_INLINE static bool IsIdentifierStart(const UChar& uchar) {
     return IsIdentifierStartChar(uchar);
   }
 
@@ -94,25 +101,54 @@ class Character : private Static {
   }
 
 
-  ALWAYS_INLINE static bool IsUnicodeEscapeSequenceStart(const UChar& uchar, const UChar& lookahead) {
+  RASP_INLINE static bool IsUnicodeEscapeSequenceStart(const UChar& uchar, const UChar& lookahead) {
     return uchar == unicode::u8('\\') && lookahead == unicode::u8('u');
   }
 
 
-  ALWAYS_INLINE static bool IsInIdentifierRange(const UChar& uchar) {
+  RASP_INLINE static bool IsInIdentifierRange(const UChar& uchar) {
     return IsIdentifierStart(uchar) || IsNumericLiteral(uchar);
   }
 
   
-  ALWAYS_INLINE static bool IsNumericLiteral(const UChar& uchar) {
+  RASP_INLINE static bool IsNumericLiteral(const UChar& uchar) {
     return GetCharType(uchar.ToUC8Ascii()) == CharType::NUMERIC;
   }
 
 
-  ALWAYS_INLINE static bool IsBinaryCharacter(const UChar& uchar) {
+  RASP_INLINE static bool IsBinaryCharacter(const UChar& uchar) {
     return uchar == unicode::u8('0') || uchar == unicode::u8('1');
   }
 
+
+  RASP_INLINE static bool IsSingleLineCommentStart(const UChar& uchar, const UChar& lookahead) {
+    return uchar == unicode::u8('/') && lookahead == unicode::u8('/');
+  }
+
+
+  RASP_INLINE static bool IsMultiLineCommentStart(const UChar& uchar, const UChar& lookahead) {
+    return uchar == unicode::u8('/') && lookahead == unicode::u8('*');
+  }
+
+
+  RASP_INLINE static bool IsMultiLineCommentEnd(const UChar& uchar, const UChar& lookahead) {
+    return uchar == unicode::u8('*') && lookahead == unicode::u8('/');
+  }
+
+
+  static LineBreakType GetLineBreakType(const UChar& uchar, const UChar& lookahead) {
+    if (uchar == unicode::u8('\n')) {
+      return LineBreakType::LF;
+    }
+    if (uchar == unicode::u8('\r')) {
+      if (lookahead == unicode::u8('\n')) {
+        return LineBreakType::CRLF;
+      }
+      return LineBreakType::CR;
+    }
+    return LineBreakType::NONE;
+  }
+  
  private:
   enum class CharType: uint8_t {
     OPERATORS,

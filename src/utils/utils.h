@@ -35,18 +35,20 @@ namespace rasp {
  * Inline macro.
  */
 #if !defined(DEBUG) && defined(_MSC_VER)
-#define ALWAYS_INLINE inline __forceinline
+#define RASP_INLINE inline __forceinline
 #elif !defined(DEBUG) && defined(__GNUC__)
-#define ALWAYS_INLINE inline __attribute__((always_inline))
+#define RASP_INLINE inline __attribute__((always_inline))
 #else
-#define ALWAYS_INLINE inline
+#define RASP_INLINE inline
 #endif
 
 #if defined(__GNUC__)
-#define NOEXCEPT noexcept
+#define RASP_NOEXCEPT noexcept
 #else
-#define NOEXCEPT
+#define RASP_NOEXCEPT
 #endif
+
+#define RASP_NO_SE const RASP_NOEXCEPT
 
 /**
  * Class traits.
@@ -90,7 +92,7 @@ class Bitmask {
  * Generic strlen.
  */
 template <typename T>
-ALWAYS_INLINE size_t Strlen(const T* str) {
+RASP_INLINE size_t Strlen(const T* str) {
   return strlen(static_cast<const char*>(str));
 }
 

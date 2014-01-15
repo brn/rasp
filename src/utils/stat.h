@@ -59,7 +59,7 @@ class Stat{
     kSock
   } FileType;
 
-  ALWAYS_INLINE Stat(const char* path)
+  RASP_INLINE Stat(const char* path)
       : path_(path){
     is_exist_ = (STAT_FN(path, &fstat_) != -1);
   }
@@ -68,55 +68,55 @@ class Stat{
   ~Stat(){};
 
 
-  ALWAYS_INLINE bool IsExist() const { return is_exist_; }
+  RASP_INLINE bool IsExist() const { return is_exist_; }
 
 
-  ALWAYS_INLINE int Dev() const { return fstat_.st_dev;}
+  RASP_INLINE int Dev() const { return fstat_.st_dev;}
 
 
-  ALWAYS_INLINE int Ino() const { return fstat_.st_ino; }
+  RASP_INLINE int Ino() const { return fstat_.st_ino; }
 
 
-  ALWAYS_INLINE int NLink() const { return fstat_.st_nlink; }
+  RASP_INLINE int NLink() const { return fstat_.st_nlink; }
 
 
-  ALWAYS_INLINE int UId() const { return fstat_.st_uid; }
+  RASP_INLINE int UId() const { return fstat_.st_uid; }
 
 
-  ALWAYS_INLINE int GId() const { return fstat_.st_gid; };
+  RASP_INLINE int GId() const { return fstat_.st_gid; };
 
 
-  ALWAYS_INLINE int RDev() const { return fstat_.st_rdev; };
+  RASP_INLINE int RDev() const { return fstat_.st_rdev; };
 
 
-  ALWAYS_INLINE int Size() const { return fstat_.st_size; };
+  RASP_INLINE int Size() const { return fstat_.st_size; };
 
 
-  ALWAYS_INLINE const char* ATime() {
+  RASP_INLINE const char* ATime() {
     CTIME(&(fstat_.st_atime),atime_);
     return atime_;
   }
 
 
-  ALWAYS_INLINE const char* MTime() {
+  RASP_INLINE const char* MTime() {
     CTIME(&(fstat_.st_mtime),mtime_);
     return mtime_;
   }
 
 
-  ALWAYS_INLINE const char* CTime() {
+  RASP_INLINE const char* CTime() {
     CTIME(&(fstat_.st_ctime),ctime_);
     return ctime_;
   }
 
 
-  ALWAYS_INLINE bool IsDir() { return MODE == S_IFDIR; }
+  RASP_INLINE bool IsDir() { return MODE == S_IFDIR; }
 
 
-  ALWAYS_INLINE bool IsReg() { return MODE == S_IFREG; }
+  RASP_INLINE bool IsReg() { return MODE == S_IFREG; }
 
 
-  ALWAYS_INLINE bool IsChr() { return MODE == S_IFCHR; }
+  RASP_INLINE bool IsChr() { return MODE == S_IFCHR; }
 
 
  private :

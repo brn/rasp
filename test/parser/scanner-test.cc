@@ -400,3 +400,57 @@ TEST(ScannerTest, ScanPuncture_question_mark) {
   ASSERT_EQ(token.type(), rasp::Token::JS_QUESTION_MARK);
   END_SCAN;
 }
+
+
+TEST(ScannerTest, SkipSingleLineComment) {
+  const char* comment = "//abcdefghijklmnopqrstuvwxyz1234567890!@#$%^&*()-_|\\`~{}[]\"\':;/?.<>,";
+  INIT(token, comment);
+  END_SCAN;
+}
+
+
+TEST(ScannerTest, SkipSingleLineComment_with_line_feed) {
+  const char* comment = "foo//abcdefghijklmnopqrstuvwxyz1234567890!@#$%^&*()-_|\\`~{}[]\"\':;/?.<>,\naaa";
+  INIT(token, comment);
+  rasp::Utf8Value utf8_value = token.value().ToUtf8Value();
+  ASSERT_EQ(token.type(), rasp::Token::JS_IDENTIFIER);
+  ASSERT_STREQ(utf8_value.value(), "foo");
+  token = scanner.Scan();
+  utf8_value = token.value().ToUtf8Value();
+  ASSERT_STREQ(utf8_value.value(), "aaa");
+  END_SCAN;
+}
+
+
+TEST(ScannerTest, SkipMultiLineComment) {
+  const char* comment = "foo/*aaaaaaaa\nbbbbbbbbbb\ncccccccccccc\nddddddddddddd*/aaa";
+  const char* comment_part = "/*aaaaaaaa\nbbbbbbbbbb\ncccccccccccc\nddddddddddddd*/";
+  INIT(token, comment);
+  rasp::Utf8Value utf8_value = token.value().ToUtf8Value();
+  ASSERT_EQ(token.type(), rasp::Token::JS_IDENTIFIER);
+  ASSERT_STREQ("foo", utf8_value.value());
+  rasp::UtfString utf_string = scanner.last_multi_line_comment();
+  ASSERT_STREQ(comment_part, utf_string.ToUtf8Value().value());
+  token = scanner.Scan();
+  utf8_value = token.value().ToUtf8Value();
+  ASSERT_STREQ("aaa", utf8_value.value());
+  ASSERT_EQ(4, scanner.line_number());
+  END_SCAN;
+}
+
+
+TEST(ScannerTest, SkipMultiLineComment_2) {
+  const char* comment = "foo/*aaaaaaaa\r\nbbbbbbbbbb\r\ncccccccccccc\r\nddddddddddddd*/aaa";
+  const char* comment_part = "/*aaaaaaaa\r\nbbbbbbbbbb\r\ncccccccccccc\r\nddddddddddddd*/";
+  INIT(token, comment);
+  rasp::Utf8Value utf8_value = token.value().ToUtf8Value();
+  ASSERT_EQ(token.type(), rasp::Token::JS_IDENTIFIER);
+  ASSERT_STREQ("foo", utf8_value.value());
+  rasp::UtfString utf_string = scanner.last_multi_line_comment();
+  ASSERT_STREQ(comment_part, utf_string.ToUtf8Value().value());
+  token = scanner.Scan();
+  utf8_value = token.value().ToUtf8Value();
+  ASSERT_STREQ("aaa", utf8_value.value());
+  ASSERT_EQ(4, scanner.line_number());
+  END_SCAN;
+}

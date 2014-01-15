@@ -55,31 +55,31 @@ class UnicodeIteratorAdapter : public std::iterator<std::forward_iterator_tag, U
   template <typename T>
   UnicodeIteratorAdapter(UnicodeIteratorAdapter<T>&& un);
   ~UnicodeIteratorAdapter() = default;
-  ALWAYS_INLINE UnicodeIteratorAdapter& operator = (InputIterator iter) {begin_ = iter;}
+  RASP_INLINE UnicodeIteratorAdapter& operator = (InputIterator iter) {begin_ = iter;}
   
 
   /**
    * Implementation of equality compare to satisfy forward_iterator concept.
    */
-  ALWAYS_INLINE bool operator == (const InputIterator& iter){return begin_ == iter;}
+  RASP_INLINE bool operator == (const InputIterator& iter){return begin_ == iter;}
 
 
   /**
    * Implementation of equality compare to satisfy forward_iterator concept.
    */
-  ALWAYS_INLINE bool operator != (const InputIterator& iter){return begin_ != iter;}
+  RASP_INLINE bool operator != (const InputIterator& iter){return begin_ != iter;}
 
 
   /**
    * Implementation of dereference to satisfy forward_iterator concept.
    */
-  ALWAYS_INLINE UChar operator* () const {return Convert();}
+  RASP_INLINE UChar operator* () const {return Convert();}
 
 
   /**
    * Implementation of increment to satisfy forward_iterator concept.
    */
-  ALWAYS_INLINE UnicodeIteratorAdapter& operator ++() {Advance();return *this;}
+  RASP_INLINE UnicodeIteratorAdapter& operator ++() {Advance();return *this;}
 
 
   /**
@@ -105,21 +105,21 @@ class UnicodeIteratorAdapter : public std::iterator<std::forward_iterator_tag, U
    * Return current line number.
    * @return line number
    */
-  ALWAYS_INLINE UC32 line_number() const {return line_number_;}
+  RASP_INLINE UC32 line_number() const {return line_number_;}
 
 
   /**
    * Return current char cursor position.
    * @return current char position.
    */
-  ALWAYS_INLINE UC32 current_position() const {return current_position_;}
+  RASP_INLINE UC32 current_position() const {return current_position_;}
 
 
   /**
    * Unwrap iterator.
    * @return wapped iterator.
    */
-  ALWAYS_INLINE const InputIterator& base() const {return begin_;}
+  RASP_INLINE const InputIterator& base() const {return begin_;}
 
   
  private:

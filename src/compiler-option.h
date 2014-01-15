@@ -38,11 +38,11 @@ enum class LanguageMode : uint8_t {
 class CompilerOption {
  public:
   CompilerOption();
-  ALWAYS_INLINE void set_language_mode(LanguageMode language_mode) {
+  RASP_INLINE void set_language_mode(LanguageMode language_mode) {
     language_mode_ = language_mode;
   }
   
-  ALWAYS_INLINE LanguageMode language_mode() const {
+  RASP_INLINE LanguageMode language_mode() const {
     return language_mode_;
   }
   
@@ -53,27 +53,27 @@ class CompilerOption {
 
 class LanguageModeUtil : private Static {
  public:
-  ALWAYS_INLINE static bool IsOctalLiteralAllowed(const CompilerOption& co) {
+  RASP_INLINE static bool IsOctalLiteralAllowed(const CompilerOption& co) {
     return co.language_mode() == LanguageMode::ES3;
   }
 
   
-  ALWAYS_INLINE static bool IsBinaryLiteralAllowed(const CompilerOption& co) {
+  RASP_INLINE static bool IsBinaryLiteralAllowed(const CompilerOption& co) {
     return co.language_mode() == LanguageMode::HARMONY;
   }
 
   
-  ALWAYS_INLINE static bool IsHarmony(const CompilerOption& co) {
+  RASP_INLINE static bool IsHarmony(const CompilerOption& co) {
     return co.language_mode() == LanguageMode::HARMONY;
   }
 
   
-  ALWAYS_INLINE static bool IsES5Strict(const CompilerOption& co) {
+  RASP_INLINE static bool IsES5Strict(const CompilerOption& co) {
     return co.language_mode() == LanguageMode::ES5_STRICT;
   }
 
   
-  ALWAYS_INLINE static bool IsES3(const CompilerOption& co) {
+  RASP_INLINE static bool IsES3(const CompilerOption& co) {
     return co.language_mode() == LanguageMode::ES3;
   }
 };
