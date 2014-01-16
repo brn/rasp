@@ -46,7 +46,7 @@ class Scanner {
   /**
    * Scan the source file from the current position to the next token position.
    */
-  const TokenInfo& Scan();
+  const TokenInfo* Scan();
 
 
   RASP_INLINE bool has_line_terminator_before_next() RASP_NO_SE {

@@ -59,8 +59,7 @@ class Stat{
     kSock
   } FileType;
 
-  RASP_INLINE Stat(const char* path)
-      : path_(path){
+  RASP_INLINE Stat(const char* path) {
     is_exist_ = (STAT_FN(path, &fstat_) != -1);
   }
 
@@ -122,7 +121,6 @@ class Stat{
  private :
 
   bool is_exist_;
-  const char* path_;
   char atime_[200];
   char mtime_[200];
   char ctime_[200];

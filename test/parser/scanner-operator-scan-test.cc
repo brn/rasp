@@ -29,7 +29,7 @@
   TEST(ScannerTest, ScanOperator_##name)              \
   {                                                   \
    INIT(token, operator);                             \
-   ASSERT_EQ(token.type(), rasp::Token::token_type);  \
+   ASSERT_EQ(token->type(), rasp::Token::token_type);  \
   }
 
 

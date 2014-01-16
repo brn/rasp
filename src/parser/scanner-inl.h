@@ -68,13 +68,13 @@ void Scanner<InputSourceIterator>::Advance()  {
 
 
 template<typename InputSourceIterator>
-const TokenInfo& Scanner<InputSourceIterator>::Scan() {
+const TokenInfo* Scanner<InputSourceIterator>::Scan() {
   has_line_terminator_before_next_ = false;
   last_multi_line_comment_.Clear();
   
   if (!char_.IsAscii()) {
     Illegal();
-    return token_info_;
+    return &token_info_;
   }
   
   if (char_ == unicode::u8('\0')) {
@@ -99,7 +99,7 @@ const TokenInfo& Scanner<InputSourceIterator>::Scan() {
   if (!SkipWhiteSpace()) {
     Advance();
   }
-  return token_info_;
+  return &token_info_;
 }
 
 

@@ -48,8 +48,8 @@
 #define END_SCAN                                  \
   {                                               \
   auto t = scanner.Scan();                        \
-  ASSERT_STREQ(t.ToString(), "END_OF_INPUT");     \
-  ASSERT_EQ(t.type(), rasp::Token::END_OF_INPUT); \
+  ASSERT_STREQ(t->ToString(), "END_OF_INPUT");     \
+  ASSERT_EQ(t->type(), rasp::Token::END_OF_INPUT); \
   }
 
 #endif

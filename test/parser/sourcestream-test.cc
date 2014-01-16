@@ -40,7 +40,6 @@ TEST(SourceStream, read_all_ok) {
 TEST(SourceStream, iterator_ok) {
   rasp::SourceStream st(filename);
   std::string expected = rasp::testing::ReadFile(filename);
-  size_t size = expected.size();
   ASSERT_TRUE(st.success());
   auto it = st.begin();
   auto end = st.end();
@@ -58,6 +57,6 @@ TEST(SourceStream, iterator_ok) {
 TEST(SourceStream, load_error) {
   rasp::SourceStream st("un-exists");
   ASSERT_FALSE(st.success());
-  ASSERT_EQ(st.size(), 0);
+  ASSERT_EQ(st.size(), 0u);
   ASSERT_GT(st.failed_message().size(), 0U);
 }
