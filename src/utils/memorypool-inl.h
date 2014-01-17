@@ -91,40 +91,35 @@ MemoryPool<kAllocatableSize>* MemoryPool<kAllocatableSize>::local_instance() {
 template <size_t kAllocatableSize>
 template <typename T>
 inline T* MemoryPool<kAllocatableSize>::Allocate(size_t size) {
-  return reinterpret_cast<T*>(Alloc<false, T>(size));
+  return reinterpret_cast<T*>(Alloc<T>(size, false));
 }
 
 
 //Allocate chunk.
 template <size_t kAllocatableSize>
 inline void* MemoryPool<kAllocatableSize>::AllocClassType(size_t size) {
-  return Alloc<true, Allocatable>(size);
+  return Alloc<Allocatable>(size, true);
 }
 
 
 template <size_t kAllocatableSize>
-template <bool is_class_type, typename T>
-void* MemoryPool<kAllocatableSize>::Alloc(size_t size) {
+template <typename T>
+void* MemoryPool<kAllocatableSize>::Alloc(size_t size, bool is_allocatable) {
   size_t aligned = Align(size, kAlignment);
   T* block = nullptr;
-
   if (aligned <= kAllocatableSize) {
-    if (!current_chunk_->value()->HasEnoughSize(aligned)) {
+    if (!current_chunk_->value()->HasEnoughSize(aligned)) {      
       current_chunk_->set_next(new SinglyLinkedList<Chunk<kAllocatableSize>>(
           new Chunk<kAllocatableSize>()));
       current_chunk_ = current_chunk_->next();
     }
-    if (is_class_type) {
+    if (is_allocatable) {
       static const size_t kClassTypeSize = sizeof(T);
       if (size < kClassTypeSize) {
         size = kClassTypeSize;
       }
     }
-    uint8_t* chunk = reinterpret_cast<uint8_t*>(current_chunk_->value()->GetBlock(aligned));
-    block = reinterpret_cast<T*>(chunk + kTagBitSize);
-    TagBit* tag = reinterpret_cast<TagBit*>(block - kTagBitSize);
-    (*tag) = 0;
-    SetTag(block, tag, aligned);
+    block = reinterpret_cast<T*>(current_chunk_->value()->GetBlock(aligned, is_allocatable));
   } else {
     block = reinterpret_cast<T*>(malloc(size));
     if (block == NULL) {
@@ -148,6 +143,7 @@ void MemoryPool<kAllocatableSize>::Append(T* pointer)  {
     current_allocatable_->set_next(allocated_list);
     current_allocatable_ = allocated_list;
   }
+  current_allocatable_->set_value(pointer);
 }
 
 } // namespace rasp

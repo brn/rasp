@@ -68,17 +68,19 @@ static const size_t kAlignment = sizeof(void*);
 static const size_t kAllocatableInterfaceSize = Align(sizeof(Allocatable), kAlignment);
 static const size_t kTagBitSize = Align(sizeof(TagBit), kAlignment);
 static const uint16_t kAllocatableTagBit = 0x4000;
-static const uint16_t kMsbMask = 0x3FFF;
+static const uint16_t kFlagMask = 0x3FFF;
+static const uint16_t kMsbMask = 0x7FFF;
 static const uint16_t kExitBit = 0x8000;
-static const uint16_t kUnExitBit = 0x7FFF;
 
 
 template <size_t kSize>
 class Chunk {
  public:
+  
+  
   Chunk()
       : used_(0u),
-        last_reserved_size_(0u){
+        last_reserved_tag_(nullptr){
     memset(block_, 0, kSize);
   }
 
@@ -91,15 +93,12 @@ class Chunk {
       return;
     }
     uint8_t* block = block_;
-    size_t used = 0;
     while (1) {
       TagBit* bit_ptr = reinterpret_cast<TagBit*>(block);
       TagBit bit = (*bit_ptr);
       bool exit = (bit & kExitBit) == kExitBit;
-      uint16_t size = bit & kMsbMask;
-      used += size + kTagBitSize;
-      printf("%d %d %d\n", exit, size, used);
-      if ((bit & kAllocatableTagBit) == kAllocatableTagBit) {
+      uint16_t size = bit & kFlagMask;
+      if (((bit & kMsbMask) & kAllocatableTagBit) == kAllocatableTagBit) {
         reinterpret_cast<Allocatable*>(block + kTagBitSize)->~Allocatable();
       }
       if (exit) {
@@ -146,45 +145,42 @@ class Chunk {
    * @param needed size.
    * @returns aligned memory chunk.
    */
-  void* GetBlock(size_t reserve) {
+  void* GetBlock(size_t reserve, bool is_allocatable) {
     ASSERT(true, HasEnoughSize(reserve));
     unset_exit_bit();
     uint8_t* ret = (block_ + used_);
-    last_reserved_size_ = (reserve + kTagBitSize);
-    if ((kSize - used_) >= last_reserved_size_) {
-      used_ += last_reserved_size_;
+    size_t reserved_size = (reserve + kTagBitSize);
+    if ((kSize - used_) >= reserved_size) {
+      used_ += reserved_size;
       used_ = Align(used_, kAlignment);
     }
+    last_reserved_tag_ = reinterpret_cast<TagBit*>(ret);
+    (*last_reserved_tag_) = reserve;
+    if (is_allocatable) {
+      (*last_reserved_tag_) |= kAllocatableTagBit;
+    }
     set_exit_bit();
-    return ret;
+    return static_cast<void*>(ret + kTagBitSize);
   }
   
   
  private :
   void set_exit_bit() {
-    TagBit *bit = nullptr;
-    if (used_ == 0u) {
-      bit = reinterpret_cast<TagBit*>(block_);
-    } else {
-      bit = reinterpret_cast<TagBit*>(block_ + (used_ - last_reserved_size_));
+    if (last_reserved_tag_ != nullptr) {
+      (*last_reserved_tag_) |= kExitBit;
     }
-    (*bit) |= kExitBit;
   }
 
   
   void unset_exit_bit() {
-    TagBit *bit = nullptr;
-    if (used_ == 0u) {
-      bit = reinterpret_cast<TagBit*>(block_);
-    } else {
-      bit = reinterpret_cast<TagBit*>(block_ + (used_ - last_reserved_size_));
+    if (last_reserved_tag_ != nullptr) {
+      (*last_reserved_tag_) &= kMsbMask;
     }
-    (*bit) &= kUnExitBit;
   }
   
   uint8_t block_[kSize];
   size_t used_;
-  size_t last_reserved_size_;
+  TagBit* last_reserved_tag_;
 };
 
 
@@ -276,16 +272,6 @@ class MemoryPool : private Uncopyable {
 
   template <typename T>
   inline T* Allocate(size_t size);
-
-
-  void SetTag(void*, TagBit* tag, size_t aligned) {
-    (*tag) = aligned;
-  }
-  
-  void SetTag(Allocatable*, TagBit* tag, size_t aligned) {
-    (*tag) = aligned;
-    (*tag) |= kAllocatableTagBit;    
-  }
   
 
 #ifdef UNIT_TEST
@@ -308,8 +294,8 @@ class MemoryPool : private Uncopyable {
   inline void* AllocClassType(size_t size);
 
 
-  template <bool is_class_type, typename T>
-  void* Alloc(size_t size);
+  template <typename T>
+  void* Alloc(size_t size, bool is_allocatable);
 
 
   template <typename T>

@@ -33,6 +33,20 @@ class Test1 : public rasp::Allocatable {
   bool* ok;
 };
 
+
+class LargeObject : public rasp::Allocatable {
+ public:
+  LargeObject(bool* ok):ok(ok){}
+  ~LargeObject() {(*ok) = true;}
+ private:
+  bool* ok;
+  uint64_t padding1;
+  uint64_t padding2;
+  uint64_t padding3;
+  uint64_t padding4;
+  uint64_t padding5;
+};
+
 TEST(MemoryPoolTest, MemoryPoolTest_allocate_from_chunk) {
   bool ok;
   rasp::MemoryPool<1024> p;
@@ -46,8 +60,8 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_from_chunk) {
 
 
 TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk) {
-  static const int kSize = 200;
-  bool ok_list[kSize] = {false};
+  static const int kSize = 10000000;
+  bool *ok_list = new bool[kSize];
   rasp::MemoryPool<1024> p;
   for (int i = 0; i < kSize; i++) {
     new(&p) Test1(&(ok_list[i]));
@@ -55,7 +69,36 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk) {
   p.Destroy();
   ASSERT_EQ(p.deleted_allocatable_list.size(), 0u);
   ASSERT_EQ(p.deleted_non_class_ptr_list.size(), 0u);
-  for (auto ok: ok_list) {
-    ASSERT_TRUE(ok);
+  for (int i = 0, len = kSize; i < len; i++) {
+    ASSERT_TRUE(ok_list[i]);
+  }
+}
+
+
+TEST(MemoryPoolTest, MemoryPoolTest_allocate_big_object) {
+  bool ok;
+  rasp::MemoryPool<8> p;
+  LargeObject* t = new(&p) LargeObject(&ok);
+  intptr_t expected_addr = reinterpret_cast<intptr_t>(t);
+  p.Destroy();
+  ASSERT_EQ(p.deleted_allocatable_list.size(), 1u);
+  ASSERT_EQ(p.deleted_non_class_ptr_list.size(), 0u);
+  ASSERT_EQ(p.deleted_chunk_list.size(), 1u);
+  ASSERT_EQ(expected_addr, p.deleted_allocatable_list.at(0));
+}
+
+
+TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_big_object) {
+  static const int kSize = 10000000;
+  bool *ok_list = new bool[kSize];
+  rasp::MemoryPool<8> p;
+  for (int i = 0; i < kSize; i++) {
+    new(&p) LargeObject(&(ok_list[i]));
+  }
+  p.Destroy();
+  ASSERT_EQ(p.deleted_chunk_list.size(), 1u);
+  ASSERT_EQ(p.deleted_non_class_ptr_list.size(), 0u);
+  for (int i = 0, len = kSize; i < len; i++) {
+    ASSERT_TRUE(ok_list[i]);
   }
 }
