@@ -80,5 +80,21 @@
       'xcode_settings': {
       },
     },
+    {
+      'target_name': 'memorypool_test',
+      'product_name': 'MemoryPoolTest',
+      'type': 'executable',
+      'include_dirs' : ['./lib', '<(additional_include)'],
+      'defines' : ['GTEST_HAS_RTTI=0', 'UNIT_TEST=1'],
+      'sources': [
+        './src/utils/os.cc',
+        './src/utils/memorypool.h',
+        './lib/gtest/gtest-all.cc',
+        './test/utils/memorypool-test.cc',
+        './test/test-main.cc',
+      ],
+      'xcode_settings': {
+      },
+    },
   ] # targets
 }

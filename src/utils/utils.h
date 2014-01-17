@@ -28,6 +28,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include "os.h"
 
 namespace rasp {
 
@@ -56,22 +57,22 @@ namespace rasp {
 #if defined __GNUC__
 
 #define ASSERT(expect, result)                                          \
-  if ((expect) != (result)) {os::FPrintf(stderr, "assertion failed -> %s == %s\n in file %s at line %d\n in function %s\n", #result, #expect, __FILE__, __LINE__, __PRETTY_FUNCTION__);abort();}
-#define FATAL(msg) os::FPrintf(stderr, "Fatal error occured, so process no longer exist.\nin file %s at line %d\n in function %s\n%s\n", __FILE__, __LINE__, __PRETTY_FUNCTION__, msg);abort();
+  if ((expect) != (result)) {FPrintf(stderr, "assertion failed -> %s == %s\n in file %s at line %d\n in function %s\n", #result, #expect, __FILE__, __LINE__, __PRETTY_FUNCTION__);abort();}
+#define FATAL(msg) FPrintf(stderr, "Fatal error occured, so process no longer exist.\nin file %s at line %d\n in function %s\n%s\n", __FILE__, __LINE__, __PRETTY_FUNCTION__, msg);abort();
 
 #elif defined __func__
 
-#define ASSERT(expect, result) if ((expect) != (result)){os::FPrintf(stderr, "assertion failed -> %s == %s\n in file %s at line %d\n in function %s\n", #result, #expect, __FILE__, __LINE__, __func__);abort();}
-#define FATAL(msg) os::FPrintf(stderr, "Fatal error occured, so process no longer exist.\nin file %s at line %d\n in function %s\n%s\n", __FILE__, __LINE__, __func__, msg);abort();
+#define ASSERT(expect, result) if ((expect) != (result)){FPrintf(stderr, "assertion failed -> %s == %s\n in file %s at line %d\n in function %s\n", #result, #expect, __FILE__, __LINE__, __func__);abort();}
+#define FATAL(msg) FPrintf(stderr, "Fatal error occured, so process no longer exist.\nin file %s at line %d\n in function %s\n%s\n", __FILE__, __LINE__, __func__, msg);abort();
 
 #elif defined __FUNC__
 
-#define ASSERT(expect, result) if ((expect) != (result)){os::FPrintf(stderr, "assertion failed -> %s == %s\n in file %s at line %d\n in function \n", #result, #expect, __FILE__, __LINE__, __FUNC__);abort();}
-#define FATAL(msg) os::FPrintf(stderr, "Fatal error occured, so process no longer exist.\nin file %s at line %d\n in function %s\n%s\n", __FILE__, __LINE__, __FUNC__, msg);abort();
+#define ASSERT(expect, result) if ((expect) != (result)){FPrintf(stderr, "assertion failed -> %s == %s\n in file %s at line %d\n in function \n", #result, #expect, __FILE__, __LINE__, __FUNC__);abort();}
+#define FATAL(msg) FPrintf(stderr, "Fatal error occured, so process no longer exist.\nin file %s at line %d\n in function %s\n%s\n", __FILE__, __LINE__, __FUNC__, msg);abort();
 
 #else
-#define ASSERT(expect, result) if ((expect) != (result)){os::FPrintf(stderr, "assertion failed -> %s == %s\n in file %s at line %d\n", #result, #expect, __FILE__, __LINE__);abort();}
-#define FATAL(msg) os::FPrintf(stderr, "Fatal error occured, so process no longer exist.\nin file %s at line %d\n%s\n", __FILE__, __LINE__, msg);abort();
+#define ASSERT(expect, result) if ((expect) != (result)){FPrintf(stderr, "assertion failed -> %s == %s\n in file %s at line %d\n", #result, #expect, __FILE__, __LINE__);abort();}
+#define FATAL(msg) FPrintf(stderr, "Fatal error occured, so process no longer exist.\nin file %s at line %d\n%s\n", __FILE__, __LINE__, msg);abort();
 #endif
 
 #elif defined NDEBUG
