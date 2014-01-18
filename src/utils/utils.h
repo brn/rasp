@@ -46,7 +46,7 @@ namespace rasp {
 #if defined(__GNUC__)
 #define RASP_NOEXCEPT noexcept
 #else
-#define RASP_NOEXCEPT
+#define RASP_NOEXCEPT throw()
 #endif
 
 #define RASP_NO_SE const RASP_NOEXCEPT

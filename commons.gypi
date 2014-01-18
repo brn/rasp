@@ -23,7 +23,6 @@
           },
           'VCLinkerTool': {
             'LinkIncremental': 2, # enable incremental linking
-            'AdditionalLibraryDirectories' : '$(LIB)'
           },
         },
         'conditions' : [
@@ -96,6 +95,7 @@
         'DataExecutionPrevention': 2, # enable DEP
         'AllowIsolation': 'true',
         'SuppressStartupBanner': 'true',
+        'AdditionalLibraryDirectories' : '<(additional_lib)',
         'target_conditions': [
           ['_type=="executable"', {
             'SubSystem': 1, # console executable

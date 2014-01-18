@@ -28,16 +28,19 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <boost/thread.hpp>
+#include <new>
 #include "utils.h"
 
 #ifdef UNIT_TEST
 #include <vector>
 #endif
 
-namespace rasp {
-template <size_t kAllocatableSize>
-class MemoryPool;
+#define RASP_ALIGN(offset, alignment) \
+  (offset + (alignment - 1)) & ~(alignment - 1)
 
+namespace rasp {
+class MemoryPool;
 
 /**
  * @class
@@ -46,141 +49,14 @@ class MemoryPool;
  * must inherit this class as public.
  */
 class Allocatable {
-  template <size_t kAllocatableSize>
   friend class MemoryPool;
  public :
   Allocatable(){}
   virtual ~Allocatable(){}
   //The placement new for the pool allocation.
-  template <size_t kAllocatableSize>
-  void* operator new(size_t size, MemoryPool<kAllocatableSize>* pool);
+  void* operator new(size_t size, MemoryPool* pool);
   void operator delete(void* ptr);
-  template <size_t kAllocatableSize>
-  void operator delete(void* ptr, MemoryPool<kAllocatableSize>* pool);
-};
-
-
-typedef uint16_t TagBit;
-static size_t Align(size_t offset, size_t alignment) {
-  return (offset + (alignment - 1)) & ~(alignment - 1);
-}
-static const size_t kAlignment = sizeof(void*);
-static const size_t kAllocatableInterfaceSize = Align(sizeof(Allocatable), kAlignment);
-static const size_t kTagBitSize = Align(sizeof(TagBit), kAlignment);
-static const uint16_t kAllocatableTagBit = 0x4000;
-static const uint16_t kFlagMask = 0x3FFF;
-static const uint16_t kMsbMask = 0x7FFF;
-static const uint16_t kExitBit = 0x8000;
-
-
-template <size_t kSize>
-class Chunk {
- public:
-  
-  
-  Chunk()
-      : used_(0u),
-        last_reserved_tag_(nullptr){
-    memset(block_, 0, kSize);
-  }
-
-  
-  ~Chunk() {}
-
-
-  void Destruct() {
-    if (0u == used_) {
-      return;
-    }
-    uint8_t* block = block_;
-    while (1) {
-      TagBit* bit_ptr = reinterpret_cast<TagBit*>(block);
-      TagBit bit = (*bit_ptr);
-      bool exit = (bit & kExitBit) == kExitBit;
-      uint16_t size = bit & kFlagMask;
-      if (((bit & kMsbMask) & kAllocatableTagBit) == kAllocatableTagBit) {
-        reinterpret_cast<Allocatable*>(block + kTagBitSize)->~Allocatable();
-      }
-      if (exit) {
-        break;
-      }
-      block += Align(size + kTagBitSize, kAlignment);
-    }
-  };
-
-  
-  /**
-   * Get next chunk pointer.
-   * By default, this method return NULL pointer,
-   * if set_next is not called yet.
-   * @return next chunk.
-   */
-  RASP_INLINE Chunk<kSize>* next() RASP_NO_SE { return next_; }
-
-  /**
-   * Link next block.
-   * Next block only allowed valid pointer.
-   * @param chunk empty chunk to link.
-   */
-  void set_next(Chunk<kSize>* chunk) {
-    ASSERT(true, chunk != NULL);
-    ASSERT(true, chunk != 0);
-    next_ = chunk;
-  }
-
-  /**
-   * Check the chunk has the enough size to allocate given size.
-   * @param needs needed size.
-   * @returns whether the chunk has the enough memory block or not.
-   */
-  RASP_INLINE bool HasEnoughSize(size_t needs) RASP_NO_SE {
-    return kSize >= used_ + needs + kTagBitSize;
-  }
-
-  /**
-   * Get memory block.
-   * Must call HasEnoughSize before call this,
-   * If the given size is over the block capacity,
-   * this method cause the segfault.
-   * @param needed size.
-   * @returns aligned memory chunk.
-   */
-  void* GetBlock(size_t reserve, bool is_allocatable) {
-    ASSERT(true, HasEnoughSize(reserve));
-    unset_exit_bit();
-    uint8_t* ret = (block_ + used_);
-    size_t reserved_size = (reserve + kTagBitSize);
-    if ((kSize - used_) >= reserved_size) {
-      used_ += reserved_size;
-      used_ = Align(used_, kAlignment);
-    }
-    last_reserved_tag_ = reinterpret_cast<TagBit*>(ret);
-    (*last_reserved_tag_) = reserve;
-    if (is_allocatable) {
-      (*last_reserved_tag_) |= kAllocatableTagBit;
-    }
-    set_exit_bit();
-    return static_cast<void*>(ret + kTagBitSize);
-  }
-  
-  
- private :
-  void set_exit_bit() {
-    if (last_reserved_tag_ != nullptr) {
-      (*last_reserved_tag_) |= kExitBit;
-    }
-  }
-
-  
-  void unset_exit_bit() {
-    if (last_reserved_tag_ != nullptr) {
-      (*last_reserved_tag_) &= kMsbMask;
-    }
-  }
-  
-  uint8_t block_[kSize];
-  size_t used_;
-  TagBit* last_reserved_tag_;
+  void operator delete(void* ptr, MemoryPool* pool);
 };
 
 
@@ -191,14 +67,90 @@ class Chunk {
  * it can not free an each space, to free memory block,
  * destroy MemoryPool class.
  */
-template <size_t kAllocatableSize>
 class MemoryPool : private Uncopyable {
   friend class Allocatable;
  private:
+  typedef uint8_t Byte;
+  typedef uint16_t TagBit;
+  
+  static const size_t kAlignment = sizeof(void*);
+  static const size_t kPointerSize = RASP_ALIGN(kAlignment, kAlignment);
+  static const size_t kAllocatableInterfaceSize = RASP_ALIGN(sizeof(Allocatable), kAlignment);
+  static const size_t kTagBitSize = RASP_ALIGN(sizeof(TagBit), kAlignment);
+  static const uint16_t kAllocatableTagBit = 0x4000;
+  static const uint16_t kFlagMask = 0x3FFF;
+  static const uint16_t kMsbMask = 0x7FFF;
+  static const uint16_t kSentinelBit = 0x8000;
   static const uint16_t kMaxAllocatableSize = 0x3FFF;
-  static_assert(kAllocatableSize <= kMaxAllocatableSize,
-                "Exceeded max allocatable size of MemoryPool.");
 
+
+  class Chunk {
+   public:
+    typedef uint8_t VerificationTag;
+    static const size_t kVerificationTagSize = RASP_ALIGN(sizeof(VerificationTag), kAlignment);
+    static const uint8_t kVerificationBit = 0xAA;
+
+    /**
+     * Instantiate Chunk from heap.
+     * @param size The block size.
+     */
+    RASP_INLINE static Chunk* New(size_t size);
+
+
+    /**
+     * Delete Chunk.
+     * @param chunk delete target.
+     */
+    RASP_INLINE static void Delete(Chunk* chunk);
+    
+  
+    Chunk(Byte* block, size_t size)
+        : block_(block),
+          block_size_(size),
+          used_(0u),
+          last_reserved_tag_(nullptr) {}
+
+  
+    ~Chunk() = default;
+
+
+    void Destruct();
+  
+
+    /**
+     * Check the chunk has the enough size to allocate given size.
+     * @param needs needed size.
+     * @returns whether the chunk has the enough memory block or not.
+     */
+    RASP_INLINE bool HasEnoughSize(size_t needs) RASP_NO_SE {
+      return block_size_ >= used_ + needs + kTagBitSize;
+    }
+  
+
+    /**
+     * Get memory block.
+     * Must call HasEnoughSize before call this,
+     * If the given size is over the block capacity,
+     * this method cause the segfault.
+     * @param needed size.
+     * @returns aligned memory chunk.
+     */
+    inline void* GetBlock(size_t reserve, bool is_allocatable);
+  
+  
+   private :
+    RASP_INLINE void set_sentinel_bit() RASP_NOEXCEPT;
+
+  
+    RASP_INLINE void unset_sentinel_bit() RASP_NOEXCEPT;
+
+    size_t block_size_;
+    Byte* block_;
+    size_t used_;
+    TagBit* last_reserved_tag_;
+  };
+  
+  
   template <typename T>
   class SinglyLinkedList {
    public:
@@ -244,18 +196,19 @@ class MemoryPool : private Uncopyable {
   void Delete(T, Deleter);
   
  public :
-  MemoryPool();
+  MemoryPool(size_t size);
+  MemoryPool(){}
 
   
   ~MemoryPool() {Destroy();}
 
 
-  void Destroy() {
+  inline void Destroy() {
     if (!deleted_) {
       deleted_ = true;
       Delete(non_class_ptr_head_, [](void* ptr) {free(ptr);});
       Delete(allocatable_head_, [](Allocatable* ptr) {ptr->~Allocatable();free(ptr);});
-      Delete(chunk_head_, [](Chunk<kAllocatableSize>* ptr) {ptr->Destruct();/*delete ptr;*/});
+      Delete(chunk_head_, [](Chunk* ptr) {Chunk::Delete(ptr);});
     }
   }
   
@@ -263,7 +216,7 @@ class MemoryPool : private Uncopyable {
   /**
    * allocate to tls space.
    */
-  static MemoryPool<kAllocatableSize>* local_instance();
+  inline static MemoryPool* local_instance(size_t size);
 
   
   template <typename T>
@@ -280,7 +233,7 @@ class MemoryPool : private Uncopyable {
   std::vector<intptr_t> deleted_chunk_list;
   void ReserveForTest(void* item) {deleted_non_class_ptr_list.push_back(reinterpret_cast<intptr_t>(item));}
   void ReserveForTest(Allocatable* item) {deleted_allocatable_list.push_back(reinterpret_cast<intptr_t>(item));}
-  void ReserveForTest(Chunk<kAllocatableSize>* item) {deleted_chunk_list.push_back(reinterpret_cast<intptr_t>(item));}
+  void ReserveForTest(Chunk* item) {deleted_chunk_list.push_back(reinterpret_cast<intptr_t>(item));}
 #endif
   
  private :
@@ -291,15 +244,15 @@ class MemoryPool : private Uncopyable {
    * all allocated memory is destoryed too.
    * Allocatable size is kDefaultSize.
    */
-  inline void* AllocClassType(size_t size);
+  inline void* AllocAllocatable(size_t size);
 
 
   template <typename T>
-  void* Alloc(size_t size, bool is_allocatable);
+  inline void* Alloc(size_t size, bool is_allocatable);
 
 
   template <typename T>
-  void Append(T* pointer);
+  inline void Append(T* pointer);
   
 
   // The malloced class list.
@@ -312,10 +265,11 @@ class MemoryPool : private Uncopyable {
   
 
   // The chunk list.
-  SinglyLinkedList<Chunk<kAllocatableSize>>* chunk_head_;
-  SinglyLinkedList<Chunk<kAllocatableSize>>* current_chunk_;
+  SinglyLinkedList<Chunk>* chunk_head_;
+  SinglyLinkedList<Chunk>* current_chunk_;
   
 
+  size_t size_;
   bool deleted_;
 };
 

@@ -49,7 +49,7 @@ class LargeObject : public rasp::Allocatable {
 
 TEST(MemoryPoolTest, MemoryPoolTest_allocate_from_chunk) {
   bool ok;
-  rasp::MemoryPool<1024> p;
+  rasp::MemoryPool p(1024);
   Test1* t = new(&p) Test1(&ok);
   p.Destroy();
   ASSERT_EQ(p.deleted_allocatable_list.size(), 0u);
@@ -62,7 +62,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_from_chunk) {
 TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk) {
   static const int kSize = 10000000;
   bool *ok_list = new bool[kSize];
-  rasp::MemoryPool<1024> p;
+  rasp::MemoryPool p(1024);
   for (int i = 0; i < kSize; i++) {
     new(&p) Test1(&(ok_list[i]));
   }
@@ -77,7 +77,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk) {
 
 TEST(MemoryPoolTest, MemoryPoolTest_allocate_big_object) {
   bool ok;
-  rasp::MemoryPool<8> p;
+  rasp::MemoryPool p(8);
   LargeObject* t = new(&p) LargeObject(&ok);
   intptr_t expected_addr = reinterpret_cast<intptr_t>(t);
   p.Destroy();
@@ -91,7 +91,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_big_object) {
 TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_big_object) {
   static const int kSize = 10000000;
   bool *ok_list = new bool[kSize];
-  rasp::MemoryPool<8> p;
+  rasp::MemoryPool p(8);
   for (int i = 0; i < kSize; i++) {
     new(&p) LargeObject(&(ok_list[i]));
   }
