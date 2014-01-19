@@ -49,10 +49,10 @@ static boost::thread_specific_ptr<MemoryPool> tls_;
 // |8-BIT VERIFY BIT|Chunk MEMORY BLOCK|The memory block managed BY Chunk|
 RASP_INLINE MemoryPool::Chunk* MemoryPool::Chunk::New(size_t size) {
   static const size_t kChunkSize = RASP_ALIGN(sizeof(Chunk), kAlignment);
-  size_t aligned_size = RASP_ALIGN(size, kAlignment);
+  const size_t aligned_size = RASP_ALIGN(size, kAlignment);
   
   // All heap size we want.
-  size_t heap_size = RASP_ALIGN((kVerificationTagSize + kChunkSize + aligned_size), kAlignment);
+  const size_t heap_size = RASP_ALIGN((kVerificationTagSize + kChunkSize + aligned_size), kAlignment);
   Byte* ptr = new Byte[heap_size];
 
   // Verification bit.
