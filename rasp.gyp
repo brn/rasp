@@ -12,7 +12,7 @@
     },
     'xcode_settings': {
       'GCC_VERSION': 'com.apple.compilers.llvm.clang.1_0',
-      'CLANG_CXX_LANGUAGE_STANDARD': 'c++0x',
+      'CLANG_CXX_LANGUAGE_STANDARD': 'c++11',
       'MACOSX_DEPLOYMENT_TARGET': '10.8', # OS X Deployment Target: 10.8
       'CLANG_CXX_LIBRARY': 'libc++', # libc++ requires OS X 10.7 or later
     },
@@ -91,7 +91,7 @@
         './src/utils/memorypool.cc',
         './lib/gtest/gtest-all.cc',
         './test/utils/memorypool-test.cc',
-        './test/test-main.cc',
+        './test/test-main.cc'
       ],
       'xcode_settings': {
       },

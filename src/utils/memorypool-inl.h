@@ -148,7 +148,7 @@ template <typename T, typename ... Args>
 RASP_INLINE T* MemoryPool::Allocate(Args ... args) {
   static_assert(std::is_destructible<T>::value == true,
                 "The allocatable type of MemoryPool::Allocate must be a destructible type.");
-  return new(Alloc<std::remove_const<T>::type,
+  return new(Alloc<typename std::remove_const<T>::type,
              std::is_class<T>::value && !std::is_enum<T>::value>(sizeof(T))) T(args...);
 }
 
@@ -158,7 +158,7 @@ RASP_INLINE T* MemoryPool::AllocateArray(size_t size) {
   static_assert(std::is_destructible<T>::value == true,
                 "The allocatable type of MemoryPool::Allocate must be a destructible type.");
   ASSERT(true, size > 0u);
-  return new(Alloc<std::remove_const<T>::type,
+  return new(Alloc<typename std::remove_const<T>::type,
              std::is_class<T>::value && !std::is_enum<T>::value>(RASP_ALIGN((sizeof(T) * size), kAlignment))) T[size];
 }
 

@@ -59,7 +59,14 @@ class Deletable {
  private:
   bool* ok;
 };
-/*
+
+
+class Array {
+ public:
+  bool* ok;
+  ~Array() {(*ok) = false;}
+};
+
 TEST(MemoryPoolTest, MemoryPoolTest_allocate_from_chunk) {
   bool ok;
   rasp::MemoryPool p(1024);
@@ -85,26 +92,29 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk) {
   }
   delete[] ok_list;
 }
-*/
+
 
 TEST(MemoryPoolTest, MemoryPoolTest_allocate_random_many_from_chunk) {
   std::random_device rd;
 	std::mt19937 mt(rd());
-	std::uniform_int_distribution<size_t> size(1, 1000);
-  static const int kSize = 10000000;
-  //bool *ok_list = new bool[kSize];
+	std::uniform_int_distribution<size_t> size(1, 100);
+  static const int kSize = 1000000;
+  bool *ok_list = new bool[kSize];
   rasp::MemoryPool p(1024);
   for (int i = 0; i < kSize; i++) {
-    char* ch = p.AllocateArray<char>(500);
-    strcpy(ch, "a");
-    ASSERT_STREQ("a", ch);
+    int s = size(mt);
+    Array* arr = p.AllocateArray<Array>(s);
+    for (int i = 0; i < s; i++) {
+      arr[i].ok = &(ok_list[i]);
+    }
   }
   printf("OK!\n");
   p.Destroy();
   ASSERT_EQ(p.deleted_malloced_list.size(), 0u);
-  /*for (int i = 0, len = kSize; i < len; i++) {
+  for (int i = 0, len = kSize; i < len; i++) {
     ASSERT_TRUE(ok_list[i]);
-    }*/
+  }
+  delete[] ok_list;
 }
 
 

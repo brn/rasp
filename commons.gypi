@@ -72,7 +72,7 @@
           ['OS=="mac"', {
             'xcode_settings' : {
               'GCC_OPTIMIZATION_LEVEL' : '3'
-            }
+            },
           }]
         ]
       }
@@ -136,7 +136,7 @@
           }, {
             'cflags': [ '-pthread' ],
             'ldflags': [ '-pthread' ],
-          }],
+          }],          
           [ 'visibility=="hidden" and gcc_version >= "4.0.0"', {
             'cflags': [ '-fvisibility=hidden' ],
           }],
@@ -167,8 +167,17 @@
             '-Wendif-labels',
             '-W',
             '-Wno-unused-parameter',
-          ],
+          ]
         },
+        'link_settings': {
+              'libraries': [
+                'libboost_system-mt.a',
+                'libboost_thread-mt.a',
+              ],
+              'library_dirs': [
+                '/usr/local/lib',
+              ],
+            },
         'target_conditions': [
           ['_type!="static_library"', {
             'xcode_settings': {'OTHER_LDFLAGS': ['-Wl,-search_paths_first']},
