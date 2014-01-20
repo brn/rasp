@@ -30,19 +30,48 @@ void MemoryPool::Chunk::Destruct() {
   if (0u == used_) {
     return;
   }
-  Byte* block = block_;
+  void* block = reinterpret_cast<void*>(block_);
   while (1) {
+    void* block_begin = block;
     TagBit* bit_ptr = reinterpret_cast<TagBit*>(block);
     TagBit bit = (*bit_ptr);
     bool exit = (bit & kSentinelBit) == kSentinelBit;
     uint16_t size = bit & kFlagMask;
-    if (((bit & kMsbMask) & kAllocatableTagBit) == kAllocatableTagBit) {
-      reinterpret_cast<Allocatable*>(block + kTagBitSize)->~Allocatable();
+    block = PtrAdd(block, kTagBitSize);
+    if ((bit & kDeallocedBit) != kDeallocedBit) {
+      DisposableBase* base = reinterpret_cast<DisposableBase*>(block);
+      block = PtrAdd(block, kDisposableBaseSize);
+      base->Dispose(block_begin, block);
+    } else {
+      block = PtrAdd(block, kDisposableBaseSize);
     }
     if (exit) {
       break;
     }
-    block += RASP_ALIGN(size + kTagBitSize, kAlignment);
+    block = PtrAdd(block, size);
+  }
+}
+
+
+void MemoryPool::Destroy() RASP_NOEXCEPT {
+  if (!deleted_) {
+    deleted_ = true;
+    Delete(malloced_head_, [this](void* ptr) {
+        void *block = ptr;
+        block = PtrAdd(block, kTagBitSize);
+        DisposableBase* base = reinterpret_cast<DisposableBase*>(block);
+        block = PtrAdd(block, kDisposableBaseSize);
+#ifdef UNIT_TEST
+        ReserveForTest(block);
+#endif
+        base->Dispose(ptr, block);
+      });
+    Delete(chunk_head_, [this](Chunk* ptr) {
+#ifdef UNIT_TEST
+        ReserveForTest(ptr);
+#endif    
+        Chunk::Delete(ptr);
+      });
   }
 }
 }

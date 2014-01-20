@@ -30,6 +30,8 @@
 #include <stdlib.h>
 #include <boost/thread.hpp>
 #include <new>
+#include <deque>
+#include <algorithm>
 #include "utils.h"
 
 #ifdef UNIT_TEST
@@ -40,26 +42,6 @@
   (offset + (alignment - 1)) & ~(alignment - 1)
 
 namespace rasp {
-class MemoryPool;
-
-/**
- * @class
- * The base of the lifetime managed pointer.
- * To allocate from the pool,
- * must inherit this class as public.
- */
-class Allocatable {
-  friend class MemoryPool;
- public :
-  Allocatable(){}
-  virtual ~Allocatable(){}
-  //The placement new for the pool allocation.
-  void* operator new(size_t size, MemoryPool* pool);
-  void operator delete(void* ptr);
-  void operator delete(void* ptr, MemoryPool* pool);
-};
-
-
 
 /**
  * The pointer lifetime managable allocator.
@@ -68,21 +50,88 @@ class Allocatable {
  * destroy MemoryPool class.
  */
 class MemoryPool : private Uncopyable {
-  friend class Allocatable;
  private:
   typedef uint8_t Byte;
   typedef uint16_t TagBit;
+
+  class DisposableBase {
+   public:
+    RASP_INLINE void Dispose(void* block_begin, void* ptr, bool is_free = true) const {
+      DisposeInternal(block_begin, ptr, is_free);
+    }
+    virtual ~DisposableBase(){}
+    RASP_INLINE virtual bool IsMalloced() const = 0;
+   private:
+    RASP_INLINE virtual void DisposeInternal(void* block_begin, void* ptr, bool is_free) const = 0;
+  };
   
   static const size_t kAlignment = sizeof(void*);
   static const size_t kPointerSize = RASP_ALIGN(kAlignment, kAlignment);
-  static const size_t kAllocatableInterfaceSize = RASP_ALIGN(sizeof(Allocatable), kAlignment);
   static const size_t kTagBitSize = RASP_ALIGN(sizeof(TagBit), kAlignment);
-  static const uint16_t kAllocatableTagBit = 0x4000;
+  static const uint16_t kDeallocedBit = 0x4000;
   static const uint16_t kFlagMask = 0x3FFF;
   static const uint16_t kMsbMask = 0x7FFF;
+  static const uint16_t kDeallocedBitMask = 0xBFFF;
   static const uint16_t kSentinelBit = 0x8000;
   static const uint16_t kMaxAllocatableSize = 0x3FFF;
+  static const size_t kDisposableBaseSize = RASP_ALIGN(sizeof(DisposableBase), kAlignment);
 
+
+  typedef std::vector<Byte*> DeallocedList;
+  
+
+  template <typename T, bool kIsMalloced, bool kIsClassType>
+  class Disposable : public MemoryPool::DisposableBase{};
+
+
+  template <typename T>
+  class Disposable<T, false, true> : public MemoryPool::DisposableBase {
+   public:
+    RASP_INLINE bool IsMalloced() const {return false;}
+   private:
+    RASP_INLINE virtual void DisposeInternal(void* block_begin, void* ptr, bool is_free) const {
+      T* object = reinterpret_cast<T*>(ptr);
+      object->~T();
+    }
+  };
+
+
+  template <typename T>
+  class Disposable<T, true, true> : public MemoryPool::DisposableBase {
+   public:
+    RASP_INLINE bool IsMalloced() const {return false;}
+   private:
+    RASP_INLINE virtual void DisposeInternal(void* block_begin, void* ptr, bool is_free) const {
+      T* object = reinterpret_cast<T*>(ptr);
+      object->~T();
+      if (is_free) {
+        free(block_begin);
+      }
+    }
+  };
+
+
+  template <typename T>
+  class Disposable<T, false, false> : public MemoryPool::DisposableBase {
+   public:
+    RASP_INLINE bool IsMalloced() const {return true;}
+   private:
+    RASP_INLINE virtual void DisposeInternal(void* block_begin, void* ptr, bool is_free) const {}
+  };
+
+
+  template <typename T>
+  class Disposable<T, true, false> : public MemoryPool::DisposableBase {
+   public:
+    RASP_INLINE bool IsMalloced() const {return true;}
+   private:
+    RASP_INLINE virtual void DisposeInternal(void* block_begin, void* ptr, bool is_free) const {
+      if (is_free) {
+        free(block_begin);
+      }
+    }
+  };
+  
 
   class Chunk {
    public:
@@ -101,7 +150,7 @@ class MemoryPool : private Uncopyable {
      * Delete Chunk.
      * @param chunk delete target.
      */
-    RASP_INLINE static void Delete(Chunk* chunk);
+    RASP_INLINE static void Delete(Chunk* chunk) RASP_NOEXCEPT;
     
   
     Chunk(Byte* block, size_t size)
@@ -123,7 +172,8 @@ class MemoryPool : private Uncopyable {
      * @returns whether the chunk has the enough memory block or not.
      */
     RASP_INLINE bool HasEnoughSize(size_t needs) RASP_NO_SE {
-      return block_size_ >= used_ + needs + kTagBitSize;
+      size_t offset = kTagBitSize + kDisposableBaseSize;
+      return block_size_ >= used_ + needs + offset;
     }
   
 
@@ -135,7 +185,7 @@ class MemoryPool : private Uncopyable {
      * @param needed size.
      * @returns aligned memory chunk.
      */
-    inline void* GetBlock(size_t reserve, bool is_allocatable);
+    inline void* GetBlock(size_t reserve) RASP_NOEXCEPT;
   
   
    private :
@@ -166,7 +216,7 @@ class MemoryPool : private Uncopyable {
     }
 
 
-    RASP_INLINE void set_value(T* v) {value_ = v;}
+    RASP_INLINE void set_value(T* v) RASP_NOEXCEPT {value_ = v;}
 
 
     RASP_INLINE T* value() RASP_NO_SE {
@@ -174,7 +224,7 @@ class MemoryPool : private Uncopyable {
     }
 
 
-    RASP_INLINE void set_next(SinglyLinkedList<T>* next) {
+    RASP_INLINE void set_next(SinglyLinkedList<T>* next) RASP_NOEXCEPT {
       next_ = next;
     }
 
@@ -193,7 +243,7 @@ class MemoryPool : private Uncopyable {
    * free memory space.
    */
   template <typename T, typename Deleter>
-  void Delete(T, Deleter);
+  void Delete(T, Deleter) RASP_NOEXCEPT;
   
  public :
   MemoryPool(size_t size);
@@ -203,13 +253,14 @@ class MemoryPool : private Uncopyable {
   ~MemoryPool() {Destroy();}
 
 
-  inline void Destroy() {
-    if (!deleted_) {
-      deleted_ = true;
-      Delete(non_class_ptr_head_, [](void* ptr) {free(ptr);});
-      Delete(allocatable_head_, [](Allocatable* ptr) {ptr->~Allocatable();free(ptr);});
-      Delete(chunk_head_, [](Chunk* ptr) {Chunk::Delete(ptr);});
-    }
+  void Destroy() RASP_NOEXCEPT;
+
+
+  size_t commited_size() const {
+    SinglyLinkedList<Chunk>* c = chunk_head_;
+    int i = 0;
+    while (c != nullptr) {i++;c = c->next();}
+    return size_ * i;
   }
   
   
@@ -219,49 +270,75 @@ class MemoryPool : private Uncopyable {
   inline static MemoryPool* local_instance(size_t size);
 
   
-  template <typename T>
-  T* Alloc(size_t size = 1);
+  template <typename T, typename ... Args>
+  RASP_INLINE T* Allocate(Args ... args);
 
 
   template <typename T>
-  inline T* Allocate(size_t size);
+  RASP_INLINE T* AllocateArray(size_t size);
+
+
+  void Dealloc(void* object) {
+    Byte* block = reinterpret_cast<Byte*>(object);
+    block -= (kDisposableBaseSize + kTagBitSize);
+    Byte* block_begin = block;
+    TagBit* tag = reinterpret_cast<TagBit*>(block);
+    DisposableBase* base = reinterpret_cast<DisposableBase*>(block + kTagBitSize);
+    base->Dispose(block_begin, block + kTagBitSize + kDisposableBaseSize, false);
+    (*tag) |= kDeallocedBit;
+    dealloced_list_.push_back(block_begin);
+  }
   
 
 #ifdef UNIT_TEST
-  std::vector<intptr_t> deleted_allocatable_list;
-  std::vector<intptr_t> deleted_non_class_ptr_list;
+  std::vector<intptr_t> deleted_malloced_list;
   std::vector<intptr_t> deleted_chunk_list;
-  void ReserveForTest(void* item) {deleted_non_class_ptr_list.push_back(reinterpret_cast<intptr_t>(item));}
-  void ReserveForTest(Allocatable* item) {deleted_allocatable_list.push_back(reinterpret_cast<intptr_t>(item));}
+  void ReserveForTest(void* item) {deleted_malloced_list.push_back(reinterpret_cast<intptr_t>(item));}
   void ReserveForTest(Chunk* item) {deleted_chunk_list.push_back(reinterpret_cast<intptr_t>(item));}
 #endif
   
  private :
 
-  /**
-   * Allocate the memory and add used block list,
-   * if the MemoryPool class is destroyed,
-   * all allocated memory is destoryed too.
-   * Allocatable size is kDefaultSize.
-   */
-  inline void* AllocAllocatable(size_t size);
-
-
   template <typename T>
-  inline void* Alloc(size_t size, bool is_allocatable);
+  RASP_INLINE static void* PtrAdd(T* ptr, size_t size) {
+    return reinterpret_cast<void*>(reinterpret_cast<Byte*>(ptr) + size);
+  }
 
 
-  template <typename T>
-  inline void Append(T* pointer);
+  template <typename T, bool is_class_type>
+  void* Alloc(size_t size);
+
+
+  template <typename T, bool is_class_type>
+  inline void* AllocFromChunk(size_t size);
+
+
+  template <typename T, bool is_class_type>
+  inline void* AllocFromHeap(size_t size);
   
 
-  // The malloced class list.
-  SinglyLinkedList<Allocatable>* current_allocatable_;
-  SinglyLinkedList<Allocatable>* allocatable_head_;
+  inline void Append(void* pointer);
 
 
-  SinglyLinkedList<void>* non_class_ptr_head_;
-  SinglyLinkedList<void>* current_non_class_ptr_;
+  template <typename T, bool is_class_type>
+  inline void* ReAllocate(size_t size);
+  
+
+  RASP_INLINE DeallocedList::iterator FindApproximateDeallocedBlock(
+      size_t size,
+      DeallocedList::iterator& begin,
+      DeallocedList::iterator& end);
+  
+  RASP_INLINE void AllocChunkIfNecessary(size_t size) RASP_NOEXCEPT {
+    if (!current_chunk_->value()->HasEnoughSize(size)) {
+      current_chunk_->set_next(new SinglyLinkedList<MemoryPool::Chunk>(MemoryPool::Chunk::New(size_)));
+      current_chunk_ = current_chunk_->next();
+    }
+  }
+  
+
+  SinglyLinkedList<void>* malloced_head_;
+  SinglyLinkedList<void>* current_malloced_;
   
 
   // The chunk list.
@@ -271,6 +348,7 @@ class MemoryPool : private Uncopyable {
 
   size_t size_;
   bool deleted_;
+  DeallocedList dealloced_list_;
 };
 
 } // namesapce rasp
