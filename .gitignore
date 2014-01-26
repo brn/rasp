@@ -12,5 +12,6 @@ gyp-mac-tool
 *.mk
 *.idb
 *.pdb
+.config.tmp
 Debug
 Release
