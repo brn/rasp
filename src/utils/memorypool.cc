@@ -26,52 +26,84 @@
 
 
 namespace rasp {
+
+// Create Chunk from byte block.
+// Chunk and heap block is create from one big memory block.
+// The structure is below
+// |8-BIT VERIFY BIT|Chunk MEMORY BLOCK|The memory block managed BY Chunk|
+MemoryPool::Chunk* MemoryPool::Chunk::New(size_t size, HeapAllocator* allocator) {
+  ASSERT(true, size <= kMaxAllocatableSize);
+  static const size_t kChunkSize = RASP_ALIGN(sizeof(Chunk), kAlignment);
+  const size_t aligned_size = RASP_ALIGN(size, kAlignment);
+  
+  // All heap size we want.
+  const size_t heap_size = RASP_ALIGN((kVerificationTagSize + kChunkSize + aligned_size), kAlignment);
+  Byte* ptr = reinterpret_cast<Byte*>(allocator->Allocate(heap_size));
+  
+  if (ptr == NULL) {
+    throw std::bad_alloc();
+  }
+
+  // Verification bit.
+  VerificationTag* tag = reinterpret_cast<VerificationTag*>(ptr);
+  (*tag) = kVerificationBit;
+  void* chunk_area = PtrAdd(ptr, kVerificationTagSize);
+  
+  // Instantiate Chunk from the memory block.
+  return new(chunk_area) Chunk(reinterpret_cast<Byte*>(PtrAdd(chunk_area, kChunkSize)), aligned_size);
+}
+
+
 void MemoryPool::Chunk::Destruct() {
-  if (0u == used_) {
+  if (0u == used_ || tail_block_ == nullptr) {
     return;
   }
-  void* block = reinterpret_cast<void*>(block_);
+  MemoryBlock* memory_block = reinterpret_cast<MemoryBlock*>(block_);
   while (1) {
-    void* block_begin = block;
-    TagBit* bit_ptr = reinterpret_cast<TagBit*>(block);
-    TagBit bit = (*bit_ptr);
-    bool exit = (bit & kSentinelBit) == kSentinelBit;
-    uint16_t size = bit & kFlagMask;
-    block = PtrAdd(block, kTagBitSize);
-    if ((bit & kDeallocedBit) != kDeallocedBit) {
-      DisposableBase* base = reinterpret_cast<DisposableBase*>(block);
-      block = PtrAdd(block, kDisposableBaseSize);
-      base->Dispose(block_begin, block);
-    } else {
-      block = PtrAdd(block, kDisposableBaseSize);
+    bool exit = IsTail(memory_block->ToBegin());
+    if (!memory_block->IsMarkedAsDealloced()) {
+      memory_block->ToDisposable()->Dispose(memory_block->ToBegin(), memory_block->ToValue<void>());
     }
     if (exit) {
       break;
     }
-    block = PtrAdd(block, size);
+    memory_block = memory_block->next_addr();
   }
+}
+
+
+MemoryPool& MemoryPool::operator = (MemoryPool&& memory_pool) {
+  current_chunk_ = memory_pool.current_chunk_;
+  chunk_head_ = memory_pool.chunk_head_;
+  dealloced_head_ = memory_pool.dealloced_head_;
+  current_dealloced_ = memory_pool.current_dealloced_;
+  size_ = memory_pool.size_;
+  deleted_ = false;
+  memory_pool.deleted_ = true;
+  memory_pool.current_chunk_ = nullptr;
+  memory_pool.chunk_head_ = nullptr;
+  memory_pool.dealloced_head_ = nullptr;
+  memory_pool.current_dealloced_ = nullptr;
+  return (*this);
 }
 
 
 void MemoryPool::Destroy() RASP_NOEXCEPT {
   if (!deleted_) {
     deleted_ = true;
-    Delete(malloced_head_, [this](void* ptr) {
-        void *block = ptr;
-        block = PtrAdd(block, kTagBitSize);
-        DisposableBase* base = reinterpret_cast<DisposableBase*>(block);
-        block = PtrAdd(block, kDisposableBaseSize);
+    auto chunk = chunk_head_;
+    if (chunk != nullptr) {
+      while (chunk != nullptr) {
+        ASSERT(true, chunk != nullptr);
 #ifdef UNIT_TEST
-        ReserveForTest(block);
-#endif
-        base->Dispose(ptr, block);
-      });
-    Delete(chunk_head_, [this](Chunk* ptr) {
-#ifdef UNIT_TEST
-        ReserveForTest(ptr);
+        ReserveForTest(chunk);
 #endif    
-        Chunk::Delete(ptr);
-      });
+        auto tmp = chunk;
+        chunk = chunk->next();
+        Chunk::Delete(tmp, &allocator_);
+      }
+    }
+    chunk_head_ = nullptr;
   }
 }
 }

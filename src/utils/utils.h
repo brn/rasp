@@ -29,21 +29,22 @@
 #include <cstdint>
 #include <cstring>
 #include "os.h"
+#include "../config.h"
 
 namespace rasp {
 
 /**
  * Inline macro.
  */
-#if !defined(DEBUG) && defined(_MSC_VER)
+#if !defined(DEBUG) && defined(HAVE_FORCE_INLINE)
 #define RASP_INLINE inline __forceinline
-#elif !defined(DEBUG) && defined(__GNUC__)
+#elif !defined(DEBUG) && defined(HAVE_INLINE_ATTRIUTE)
 #define RASP_INLINE inline __attribute__((always_inline))
 #else
 #define RASP_INLINE inline
 #endif
 
-#if defined(__GNUC__)
+#if defined(HAVE_NOEXCEPT)
 #define RASP_NOEXCEPT noexcept
 #else
 #define RASP_NOEXCEPT throw()
@@ -83,6 +84,17 @@ namespace rasp {
 #define FATAL(msg)
 #endif
 // ASSERT macro definition end.
+
+
+typedef uint8_t Byte;
+#ifdef PLATFORM_64BIT
+typedef uint64_t Pointer;
+#elif defined(PLATFORM_32BIT)
+typedef uint32_t Pointer;
+#endif
+
+
+static const size_t kAlignment = sizeof(void*);
 
 
 /**

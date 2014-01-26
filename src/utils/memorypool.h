@@ -33,13 +33,16 @@
 #include <deque>
 #include <algorithm>
 #include "utils.h"
+#include "../config.h"
+#include "heap-alloc.h"
 
 #ifdef UNIT_TEST
 #include <vector>
 #endif
 
-#define RASP_ALIGN(offset, alignment) \
+#define RASP_ALIGN(offset, alignment)           \
   (offset + (alignment - 1)) & ~(alignment - 1)
+
 
 namespace rasp {
 
@@ -51,86 +54,109 @@ namespace rasp {
  */
 class MemoryPool : private Uncopyable {
  private:
-  typedef uint8_t Byte;
-  typedef uint16_t TagBit;
-
-  class DisposableBase {
-   public:
-    RASP_INLINE void Dispose(void* block_begin, void* ptr, bool is_free = true) const {
-      DisposeInternal(block_begin, ptr, is_free);
-    }
-    virtual ~DisposableBase(){}
-    RASP_INLINE virtual bool IsMalloced() const = 0;
-   private:
-    RASP_INLINE virtual void DisposeInternal(void* block_begin, void* ptr, bool is_free) const = 0;
-  };
+  class Chunk;
+  class DisposableBase;
+  template <typename T, bool kIsClassType, bool is_array>
+  class Disposable;
+  struct MemoryBlock;
   
-  static const size_t kAlignment = sizeof(void*);
-  static const size_t kPointerSize = RASP_ALIGN(kAlignment, kAlignment);
-  static const size_t kTagBitSize = RASP_ALIGN(sizeof(TagBit), kAlignment);
-  static const uint16_t kDeallocedBit = 0x4000;
-  static const uint16_t kFlagMask = 0x3FFF;
-  static const uint16_t kMsbMask = 0x7FFF;
-  static const uint16_t kDeallocedBitMask = 0xBFFF;
-  static const uint16_t kSentinelBit = 0x8000;
-  static const uint16_t kMaxAllocatableSize = 0x3FFF;
-  static const size_t kDisposableBaseSize = RASP_ALIGN(sizeof(DisposableBase), kAlignment);
+ public :
+  explicit MemoryPool(size_t size);
+
+  
+  ~MemoryPool() {Destroy();}
 
 
-  typedef std::vector<Byte*> DeallocedList;
+  MemoryPool(MemoryPool&& memory_pool) {
+    std::swap(*this, memory_pool);
+  }
   
 
-  template <typename T, bool kIsMalloced, bool kIsClassType>
-  class Disposable : public MemoryPool::DisposableBase{};
+  MemoryPool& operator = (MemoryPool&& memory_pool);
 
 
+  /**
+   * Free all allocated memory.
+   */
+  void Destroy() RASP_NOEXCEPT;
+
+
+  /**
+     Get used memory size of the memory block except the header size.
+   * @return The used memory size.
+   */
+  inline uint64_t CommitedSize() RASP_NO_SE;
+  
+  
+  /**
+   * allocate to tls space.
+   */
+  inline static MemoryPool* local_instance(size_t size);
+
+
+  /**
+   * Create an instance from the reserved memory block.
+   * @return Specified class instance.
+   */
+  template <typename T, typename ... Args>
+  RASP_INLINE T* Allocate(Args ... args);
+
+
+  /**
+   * Create an array from the reserved memory block.
+   * @return Specified class array.
+   */
   template <typename T>
-  class Disposable<T, false, true> : public MemoryPool::DisposableBase {
-   public:
-    RASP_INLINE bool IsMalloced() const {return false;}
-   private:
-    RASP_INLINE virtual void DisposeInternal(void* block_begin, void* ptr, bool is_free) const {
-      T* object = reinterpret_cast<T*>(ptr);
-      object->~T();
-    }
-  };
+  RASP_INLINE T* AllocateArray(size_t size);
 
 
+  /**
+   * Free the specified pointer.
+   * This function in fact not release memory.
+   * This method add memory block to the free list and call destructor.
+   * @param object The object pointer that is allocated by MemoryPool::Allocate[Array].
+   */
+  inline void Dealloc(void* object);
+  
+
+  // for unit test.
+#ifdef UNIT_TEST
+  std::vector<intptr_t> deleted_chunk_list;
+  void ReserveForTest(Chunk* item) {deleted_chunk_list.push_back(reinterpret_cast<intptr_t>(item));}
+#endif
+  
+ private :
+
+  /**
+   * Remove MemoryBlock from the free list.
+   * @param find The pointer which is realloced.
+   * @param last The pointer which is the prev pointer of the find.
+   */
+  inline void EraseFromDeallocedList(MemoryPool::MemoryBlock* find, MemoryPool::MemoryBlock* last);
+
+  
   template <typename T>
-  class Disposable<T, true, true> : public MemoryPool::DisposableBase {
-   public:
-    RASP_INLINE bool IsMalloced() const {return false;}
-   private:
-    RASP_INLINE virtual void DisposeInternal(void* block_begin, void* ptr, bool is_free) const {
-      T* object = reinterpret_cast<T*>(ptr);
-      object->~T();
-      if (is_free) {
-        free(block_begin);
-      }
-    }
-  };
+  RASP_INLINE static void* PtrAdd(T* ptr, size_t size) {
+    return reinterpret_cast<void*>(reinterpret_cast<Byte*>(ptr) + size);
+  }
 
 
-  template <typename T>
-  class Disposable<T, false, false> : public MemoryPool::DisposableBase {
-   public:
-    RASP_INLINE bool IsMalloced() const {return true;}
-   private:
-    RASP_INLINE virtual void DisposeInternal(void* block_begin, void* ptr, bool is_free) const {}
-  };
+  template <typename T, bool is_class_type, bool is_array>
+  inline void* Alloc(size_t size, size_t array_size = 0);
 
 
-  template <typename T>
-  class Disposable<T, true, false> : public MemoryPool::DisposableBase {
-   public:
-    RASP_INLINE bool IsMalloced() const {return true;}
-   private:
-    RASP_INLINE virtual void DisposeInternal(void* block_begin, void* ptr, bool is_free) const {
-      if (is_free) {
-        free(block_begin);
-      }
-    }
-  };
+  template <typename T, bool is_class_type, bool is_array>
+  inline void* AllocFromChunk(size_t size, size_t array_size);
+  
+
+  template <typename T, bool is_class_type, bool is_array>
+  inline void* ReAllocate(size_t size, size_t array_size);
+  
+
+  inline MemoryPool::MemoryBlock* FindApproximateDeallocedBlock(size_t size);
+
+  
+  inline void AllocChunkIfNecessary(size_t size);
   
 
   class Chunk {
@@ -143,21 +169,22 @@ class MemoryPool : private Uncopyable {
      * Instantiate Chunk from heap.
      * @param size The block size.
      */
-    RASP_INLINE static Chunk* New(size_t size);
+    static Chunk* New(size_t size, HeapAllocator* allocator);
 
 
     /**
      * Delete Chunk.
      * @param chunk delete target.
      */
-    RASP_INLINE static void Delete(Chunk* chunk) RASP_NOEXCEPT;
+    inline static void Delete(Chunk* chunk, HeapAllocator* allocator) RASP_NOEXCEPT;
     
   
     Chunk(Byte* block, size_t size)
-        : block_(block),
-          block_size_(size),
+        : block_size_(size),
           used_(0u),
-          last_reserved_tag_(nullptr) {}
+          block_(block),
+          tail_block_(nullptr),
+          next_(nullptr) {}
 
   
     ~Chunk() = default;
@@ -171,10 +198,7 @@ class MemoryPool : private Uncopyable {
      * @param needs needed size.
      * @returns whether the chunk has the enough memory block or not.
      */
-    RASP_INLINE bool HasEnoughSize(size_t needs) RASP_NO_SE {
-      size_t offset = kTagBitSize + kDisposableBaseSize;
-      return block_size_ >= used_ + needs + offset;
-    }
+    RASP_INLINE bool HasEnoughSize(size_t needs) RASP_NO_SE;
   
 
     /**
@@ -185,173 +209,90 @@ class MemoryPool : private Uncopyable {
      * @param needed size.
      * @returns aligned memory chunk.
      */
-    inline void* GetBlock(size_t reserve) RASP_NOEXCEPT;
-  
+    inline MemoryBlock* GetBlock(size_t reserve) RASP_NOEXCEPT;
+
+
+    RASP_INLINE void set_tail(Byte* block_begin) RASP_NOEXCEPT {
+      tail_block_ = block_begin;
+    }
+
+
+    RASP_INLINE bool IsTail(Byte* block_begin) RASP_NOEXCEPT {
+      return tail_block_ == block_begin;
+    }
+
+
+    RASP_INLINE void set_next(Chunk* chunk) RASP_NOEXCEPT {next_ = chunk;}
+
+
+    RASP_INLINE Chunk* next() RASP_NO_SE {return next_;}
+
+
+    RASP_INLINE size_t size() RASP_NO_SE {return block_size_;}
+    
   
    private :
-    RASP_INLINE void set_sentinel_bit() RASP_NOEXCEPT;
-
-  
-    RASP_INLINE void unset_sentinel_bit() RASP_NOEXCEPT;
 
     size_t block_size_;
-    Byte* block_;
     size_t used_;
-    TagBit* last_reserved_tag_;
+    Byte* block_;
+    Byte* tail_block_;
+    Chunk* next_;
   };
-  
-  
-  template <typename T>
-  class SinglyLinkedList {
+
+
+  class DisposableBase {
    public:
-    typedef SinglyLinkedList<T> type;
-    SinglyLinkedList()
-        : next_(nullptr),
-          value_(nullptr){}
-
-    
-    SinglyLinkedList(T* value)
-        : SinglyLinkedList() {
-      set_value(value);
-    }
-
-
-    RASP_INLINE void set_value(T* v) RASP_NOEXCEPT {value_ = v;}
-
-
-    RASP_INLINE T* value() RASP_NO_SE {
-      return value_;
-    }
-
-
-    RASP_INLINE void set_next(SinglyLinkedList<T>* next) RASP_NOEXCEPT {
-      next_ = next;
-    }
-
-
-    RASP_INLINE SinglyLinkedList<T>* next() RASP_NO_SE {
-      return next_;
-    }
-    
+    RASP_INLINE DisposableBase(size_t array_size);
+    RASP_INLINE void Dispose(void* block_begin, void* ptr, bool is_free = true) const;
+    virtual ~DisposableBase(){}
+   protected:
+    size_t array_size_;
    private:
-    T* value_;
-    SinglyLinkedList<T>* next_;
+    RASP_INLINE virtual void DisposeInternal(void* block_begin, void* ptr, bool is_free) const = 0;
   };
-
-
-  /**
-   * free memory space.
-   */
-  template <typename T, typename Deleter>
-  void Delete(T, Deleter) RASP_NOEXCEPT;
-  
- public :
-  MemoryPool(size_t size);
-  MemoryPool(){}
-
-  
-  ~MemoryPool() {Destroy();}
-
-
-  void Destroy() RASP_NOEXCEPT;
-
-
-  size_t commited_size() const {
-    SinglyLinkedList<Chunk>* c = chunk_head_;
-    int i = 0;
-    while (c != nullptr) {i++;c = c->next();}
-    return size_ * i;
-  }
-  
-  
-  /**
-   * allocate to tls space.
-   */
-  inline static MemoryPool* local_instance(size_t size);
-
-  
-  template <typename T, typename ... Args>
-  RASP_INLINE T* Allocate(Args ... args);
-
-
-  template <typename T>
-  RASP_INLINE T* AllocateArray(size_t size);
-
-
-  void Dealloc(void* object) {
-    Byte* block = reinterpret_cast<Byte*>(object);
-    block -= (kDisposableBaseSize + kTagBitSize);
-    Byte* block_begin = block;
-    TagBit* tag = reinterpret_cast<TagBit*>(block);
-    DisposableBase* base = reinterpret_cast<DisposableBase*>(block + kTagBitSize);
-    base->Dispose(block_begin, block + kTagBitSize + kDisposableBaseSize, false);
-    (*tag) |= kDeallocedBit;
-    dealloced_list_.push_back(block_begin);
-  }
-  
-
-#ifdef UNIT_TEST
-  std::vector<intptr_t> deleted_malloced_list;
-  std::vector<intptr_t> deleted_chunk_list;
-  void ReserveForTest(void* item) {deleted_malloced_list.push_back(reinterpret_cast<intptr_t>(item));}
-  void ReserveForTest(Chunk* item) {deleted_chunk_list.push_back(reinterpret_cast<intptr_t>(item));}
-#endif
-  
- private :
-
-  template <typename T>
-  RASP_INLINE static void* PtrAdd(T* ptr, size_t size) {
-    return reinterpret_cast<void*>(reinterpret_cast<Byte*>(ptr) + size);
-  }
-
-
-  template <typename T, bool is_class_type>
-  void* Alloc(size_t size);
-
-
-  template <typename T, bool is_class_type>
-  inline void* AllocFromChunk(size_t size);
-
-
-  template <typename T, bool is_class_type>
-  inline void* AllocFromHeap(size_t size);
-  
-
-  inline void Append(void* pointer);
-
-
-  template <typename T, bool is_class_type>
-  inline void* ReAllocate(size_t size);
-  
-
-  RASP_INLINE DeallocedList::iterator FindApproximateDeallocedBlock(
-      size_t size,
-      DeallocedList::iterator& begin,
-      DeallocedList::iterator& end);
-  
-  RASP_INLINE void AllocChunkIfNecessary(size_t size) RASP_NOEXCEPT {
-    if (!current_chunk_->value()->HasEnoughSize(size)) {
-      current_chunk_->set_next(new SinglyLinkedList<MemoryPool::Chunk>(MemoryPool::Chunk::New(size_)));
-      current_chunk_ = current_chunk_->next();
-    }
-  }
-  
-
-  SinglyLinkedList<void>* malloced_head_;
-  SinglyLinkedList<void>* current_malloced_;
   
 
   // The chunk list.
-  SinglyLinkedList<Chunk>* chunk_head_;
-  SinglyLinkedList<Chunk>* current_chunk_;
+  Chunk* chunk_head_;
+  Chunk* current_chunk_;
+
+
+  MemoryBlock* dealloced_head_;
+  MemoryBlock* current_dealloced_;
   
 
   size_t size_;
   bool deleted_;
-  DeallocedList dealloced_list_;
+  
+  HeapAllocator allocator_;
+
+
+#ifdef PLATFORM_64BIT
+  typedef uint64_t SizeBit;
+  typedef uint64_t Size;
+  static const uint64_t kTagRemoveBit = 0xFFFFFFFFFFFFFFFC;
+  static const uint64_t kMaxAllocatableSize = UINT64_MAX;
+  static const uint64_t kDeallocedMask = 0xFFFFFFFFFFFFFFFD;
+#elif defined(PLATFORM_32BIT)
+  typedef uint32_t SizeBit;
+  typedef uint32_t Size;
+  static const uint64_t kTagRemoveBit = 0xFFFFFFFC;
+  static const uint32_t kMaxAllocatableSize = UINT32_MAX;
+  static const uint64_t kDeallocedMask = 0xFFFFFFFD;
+#endif
+
+  static const size_t kPointerSize = kAlignment;
+  static const size_t kSizeBitSize = RASP_ALIGN(sizeof(SizeBit), kAlignment);
+  static const uint8_t kDeallocedBit = 0x2;
+  static const uint32_t kInvalidPointer = 0xDEADC0DE;
+  static const size_t kDisposableBaseSize = RASP_ALIGN(sizeof(MemoryPool::DisposableBase), kAlignment);
+  static const size_t kDisposableOffset = kSizeBitSize + kPointerSize;
+  static const size_t kValueOffset = kDisposableOffset + kDisposableBaseSize;
 };
 
 } // namesapce rasp
+
 
 #include "memorypool-inl.h"
 #endif

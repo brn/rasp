@@ -8,7 +8,7 @@
     'msvs_settings': {
       'VCCLCompilerTool': {
         'WarningLevel': '4', # /W4
-      },
+      }
     },
     'xcode_settings': {
       'GCC_VERSION': 'com.apple.compilers.llvm.clang.1_0',
