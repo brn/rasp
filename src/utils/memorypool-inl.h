@@ -88,47 +88,47 @@ class MemoryPool::Disposable<T, false, is_array> : public MemoryPool::Disposable
 
 struct MemoryPool::MemoryBlock {
 
-  RASP_INLINE Size size() RASP_NO_SE {
+  RASP_INLINE Size size() RASP_NOEXCEPT {
     return *(ToSizeBit());
   }
     
     
-  RASP_INLINE SizeBit* ToSizeBit() RASP_NO_SE {
+  RASP_INLINE SizeBit* ToSizeBit() RASP_NOEXCEPT {
     return reinterpret_cast<SizeBit*>(ToBegin());
   }
 
 
-  RASP_INLINE MemoryBlock* next_addr() RASP_NO_SE {
+  RASP_INLINE MemoryBlock* next_addr() RASP_NOEXCEPT {
     return reinterpret_cast<MemoryBlock*>(ToValue() + size());
   }
     
 
-  RASP_INLINE MemoryBlock* ToNextPtr() RASP_NO_SE {
+  RASP_INLINE MemoryBlock* ToNextPtr() RASP_NOEXCEPT {
     return reinterpret_cast<MemoryBlock*>(*(reinterpret_cast<Byte**>(ToBegin() + kSizeBitSize)));
   }
 
     
-  RASP_INLINE void set_next_ptr(Byte* next_ptr) RASP_NO_SE {
+  RASP_INLINE void set_next_ptr(Byte* next_ptr) RASP_NOEXCEPT {
     Byte** next_head = reinterpret_cast<Byte**>(ToBegin() + kSizeBitSize);
     *next_head = next_ptr;
   }
 
 
-  RASP_INLINE void set_next_ptr(MemoryBlock* next_ptr) RASP_NO_SE {
+  RASP_INLINE void set_next_ptr(MemoryBlock* next_ptr) RASP_NOEXCEPT {
     Byte** next_head = reinterpret_cast<Byte**>(ToBegin() + kSizeBitSize);
     *next_head = next_ptr->ToBegin();
   }
     
 
   template <typename T = DisposableBase*>
-  RASP_INLINE typename std::remove_pointer<T>::type* ToDisposable() RASP_NO_SE {
+  RASP_INLINE typename std::remove_pointer<T>::type* ToDisposable() RASP_NOEXCEPT {
     Pointer p = reinterpret_cast<Pointer>(ToBegin() + kDisposableOffset);
     return reinterpret_cast<typename std::remove_pointer<T>::type*>(p & kTagRemoveBit);
   }
 
 
   template <typename T = Byte*>
-  RASP_INLINE typename std::remove_pointer<T>::type* ToValue() RASP_NO_SE {
+  RASP_INLINE typename std::remove_pointer<T>::type* ToValue() RASP_NOEXCEPT {
     return reinterpret_cast<typename std::remove_pointer<T>::type*>(ToBegin() + kValueOffset);
   }
 
@@ -145,13 +145,13 @@ struct MemoryPool::MemoryBlock {
   }
 
 
-  RASP_INLINE bool IsMarkedAsDealloced() RASP_NO_SE {
+  RASP_INLINE bool IsMarkedAsDealloced() RASP_NOEXCEPT {
     return (reinterpret_cast<Pointer>(ToBegin() + kSizeBitSize) & kDeallocedBit) == kDeallocedBit;
   }
 
 
-  RASP_INLINE Byte* ToBegin() RASP_NO_SE {
-    return reinterpret_cast<Byte*>(const_cast<MemoryBlock*>(this));
+  RASP_INLINE Byte* ToBegin() RASP_NOEXCEPT {
+    return reinterpret_cast<Byte*>(this);
   }
 };
 
@@ -162,10 +162,11 @@ static boost::thread_specific_ptr<MemoryPool> tls_;
 inline void MemoryPool::Chunk::Delete(Chunk* chunk, Mmap* allocator) RASP_NOEXCEPT {
   chunk->Destruct();
   chunk->~Chunk();
+#ifdef DEBUG
   Byte* block = reinterpret_cast<Byte*>(chunk);
   Byte* block_begin = block - kVerificationTagSize;
-  VerificationTag* tag = reinterpret_cast<VerificationTag*>(block_begin);
-  ASSERT(true, (*tag) == kVerificationBit);
+  ASSERT(true, (*reinterpret_cast<VerificationTag*>(block_begin)) == kVerificationBit);
+#endif
 }
 
 
@@ -204,12 +205,12 @@ inline rasp::MemoryPool::MemoryBlock* MemoryPool::Chunk::GetBlock(size_t reserve
 
 //MemoryPool constructor.
 inline MemoryPool::MemoryPool(size_t size)
-    : size_(size + (size / kPointerSize) * 2),
-      deleted_(false),
+    : chunk_head_(nullptr),
       current_chunk_(nullptr),
-      chunk_head_(nullptr),
       dealloced_head_(nullptr),
-      current_dealloced_(nullptr) {
+      current_dealloced_(nullptr),
+      size_(size + (size / kPointerSize) * 2),
+      deleted_(false) {
   ASSERT(true, size <= kMaxAllocatableSize);
 }
 
