@@ -29,7 +29,7 @@ def CheckThreads(builder, args) :
   stds['mutex'] = builder.CheckStruct(False, [
       {
         'name' : 'std::mutex',
-        'header' : ['thread.hpp', 'mutex'],
+        'header' : ['thread', 'mutex'],
         'struct': 'std::mutex'
       }
       ], 'mutex required.')

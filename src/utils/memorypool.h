@@ -29,9 +29,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <boost/thread.hpp>
+#include <atomic>
 #include <new>
 #include <deque>
 #include <algorithm>
+#include <mutex>
 #include "utils.h"
 #include "../config.h"
 #include "mmap.h"
@@ -132,15 +134,15 @@ class MemoryPool : private Uncopyable {
 
 
   template <typename T, bool is_class_type, bool is_array>
-  inline void* Alloc(size_t size, size_t array_size = 0);
+  inline void* DistributeBlockWhileLocked(size_t size, size_t array_size = 0);
 
 
   template <typename T, bool is_class_type, bool is_array>
-  inline void* AllocFromChunk(size_t size, size_t array_size);
+  inline void* DistributeBlockFromChunk(size_t size, size_t array_size);
   
 
   template <typename T, bool is_class_type, bool is_array>
-  inline void* ReAllocate(size_t size, size_t array_size);
+  inline void* DistributeBlockFromDeallocedList(size_t size, size_t array_size);
   
 
   inline MemoryPool::MemoryBlock* FindApproximateDeallocedBlock(size_t size);
@@ -253,10 +255,12 @@ class MemoryPool : private Uncopyable {
   
 
   size_t size_;
-  bool deleted_;
+  std::atomic<bool> deleted_;
   
   Mmap allocator_;
 
+  std::mutex allocation_mutex_;
+  std::mutex deallocation_mutex_;
 
 #ifdef PLATFORM_64BIT
   typedef uint64_t SizeBit;

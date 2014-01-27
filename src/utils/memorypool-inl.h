@@ -236,7 +236,7 @@ template <typename T, typename ... Args>
 RASP_INLINE T* MemoryPool::Allocate(Args ... args) {
   static_assert(std::is_destructible<T>::value == true,
                 "The allocatable type of MemoryPool::Allocate must be a destructible type.");
-  return new(Alloc<typename std::remove_const<T>::type,
+  return new(DistributeBlockWhileLocked<typename std::remove_const<T>::type,
              std::is_class<T>::value && !std::is_enum<T>::value, false>(sizeof(T))) T(args...);
 }
 
@@ -248,7 +248,7 @@ RASP_INLINE T* MemoryPool::AllocateArray(size_t size) {
   ASSERT(true, size > 0u);
   static const bool is_class_type = std::is_class<T>::value && !std::is_enum<T>::value;
   static const size_t kSize = sizeof(T);
-  T* ptr = reinterpret_cast<T*>(Alloc<typename std::remove_const<T>::type,
+  T* ptr = reinterpret_cast<T*>(DistributeBlockWhileLocked<typename std::remove_const<T>::type,
                                 is_class_type, true>(kSize * size, size));
   T* head = ptr;
   if (is_class_type) {
@@ -262,36 +262,43 @@ RASP_INLINE T* MemoryPool::AllocateArray(size_t size) {
 
 
 inline void MemoryPool::Dealloc(void* object) {
+  //std::lock_guard<std::recursive_mutex> lock(deallocation_mutex_);
+  
   Byte* block = reinterpret_cast<Byte*>(object);
   block -= kValueOffset;
   MemoryBlock* memory_block = reinterpret_cast<MemoryBlock*>(block);
-  memory_block->ToDisposable()->Dispose(
-      memory_block->ToSizeBit(), memory_block->ToValue<void>(), false);
-  memory_block->MarkAsDealloced();
-  if (dealloced_head_ == nullptr) {
-    current_dealloced_ = dealloced_head_ = memory_block;
-  } else {
-    current_dealloced_->set_next_ptr(memory_block->ToBegin());
+  
+  if (!memory_block->IsMarkedAsDealloced()) {
+    memory_block->ToDisposable()->Dispose(
+        memory_block->ToSizeBit(), memory_block->ToValue<void>(), false);
+    memory_block->MarkAsDealloced();
+    if (dealloced_head_ == nullptr) {
+      current_dealloced_ = dealloced_head_ = memory_block;
+    } else {
+      current_dealloced_->set_next_ptr(memory_block->ToBegin());
+    }
   }
 }
 
 
 template <typename T, bool is_class_type, bool is_array>
-inline void* MemoryPool::Alloc(size_t size, size_t array_size) {
+inline void* MemoryPool::DistributeBlockWhileLocked(size_t size, size_t array_size) {
+  std::lock_guard<std::mutex> lock(allocation_mutex_);
+  
   size_t aligned_size = RASP_ALIGN(size, kAlignment);
   if (dealloced_head_ != nullptr) {
-    void* block = ReAllocate<T, is_class_type, is_array>(aligned_size, array_size);
+    void* block = DistributeBlockFromDeallocedList<T, is_class_type, is_array>(aligned_size, array_size);
     if (block != nullptr) {
       return block;
     }
   }
   
-  return AllocFromChunk<T, is_class_type, is_array>(aligned_size, array_size);
+  return DistributeBlockFromChunk<T, is_class_type, is_array>(aligned_size, array_size);
 }
 
 
 template <typename T, bool is_class_type, bool is_array>
-inline void* MemoryPool::ReAllocate(size_t size, size_t array_size) {
+inline void* MemoryPool::DistributeBlockFromDeallocedList(size_t size, size_t array_size) {
   MemoryBlock* memory_block = FindApproximateDeallocedBlock(size);
     
   if (memory_block != nullptr) {
@@ -306,7 +313,7 @@ inline void* MemoryPool::ReAllocate(size_t size, size_t array_size) {
 
 
 template <typename T, bool is_class_type, bool is_array>
-inline void* MemoryPool::AllocFromChunk(size_t size, size_t array_size) {
+inline void* MemoryPool::DistributeBlockFromChunk(size_t size, size_t array_size) {
   AllocChunkIfNecessary(size);
   MemoryBlock* block = nullptr;
     

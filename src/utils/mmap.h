@@ -26,6 +26,8 @@
 #ifndef UTILS_MMAP_H_
 #define UTILS_MMAP_H_
 
+#include <atomic>
+
 namespace rasp {
 class Mmap {
   class InternalMmap;
@@ -37,7 +39,7 @@ class Mmap {
 
  private:
   InternalMmap* mmap_;
-  bool uncommited_;
+  std::atomic<bool> uncommited_;
   static const size_t kDefaultByte = 1048576u;
 };
 

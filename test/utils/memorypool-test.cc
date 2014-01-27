@@ -119,7 +119,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_random_many_from_chunk) {
   std::random_device rd;
 	std::mt19937 mt(rd());
 	std::uniform_int_distribution<size_t> size(1, 100);
-  static const int kSize = 1000000;
+  static const int kSize = 10000000;
   std::vector<int> size_list;
   std::vector<bool*> ok_list;
   rasp::MemoryPool p(1024);
@@ -145,7 +145,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_random_many_from_chunk) {
 
 
 TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_and_dealloc2) {
-  static const int kSize = 1000000;
+  static const int kSize = 10000000;
   std::random_device rd;
 	std::mt19937 mt(rd());
 	std::uniform_int_distribution<size_t> size(1, 100);
@@ -176,7 +176,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_and_dealloc2) {
 
 
 TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_and_dealloc) {
-  static const int kSize = 1000000;
+  static const int kSize = 10000000;
   bool *ok_list = new bool[kSize];
   rasp::MemoryPool p(1024);
   for (int i = 0; i < kSize; i++) {
@@ -239,6 +239,20 @@ TEST(MemoryPoolTest, MemoryPoolTest_performance2) {
     std::shared_ptr<Test1> t = std::make_shared<Test1>(&ok);
     t->ok = &ok;
     last = t->check();
+  }
+  ASSERT_TRUE(last);
+}
+
+
+TEST(MemoryPoolTest, MemoryPoolTest_performance3) {
+  static const int kSize = 10000000;
+  bool ok = true;
+  bool last = false;
+  for (int i = 0; i < kSize; i++) {
+    Test1* t = new Test1(&ok);
+    t->ok = &ok;
+    last = t->check();
+    delete t;
   }
   ASSERT_TRUE(last);
 }

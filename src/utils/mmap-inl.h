@@ -26,68 +26,18 @@
 #ifndef UTILS_MMAP_INL_H_
 #define UTILS_MMAP_INL_H_
 
-namespace rasp {
-
-
-#ifdef HAVE_HEAPALLOC
-#include <windows.h>
 #include "./utils.h"
-
-class Mmap::InternalMmap {
- public:
-  InternalMmap() {
-    heap_ = HeapCreate(NULL, 0, 0);
-    if (heap_ == NULL) {
-      throw std::bad_alloc();
-    }
-  }
+#include "../config.h"
 
 
-  ~InternalMmap() {
-    HeapDestroy(heap_);
-  }
-  
-  
-  RASP_INLINE void* Allocate(size_t size) {    
-    void* ret = HeapAlloc(heap_, HEAP_ZERO_MEMORY, size);
-    if (ret == NULL) {
-      throw std::bad_alloc();
-    }
-    return ret;
-  }
-
-
-  RASP_INLINE void Dealloc(void* area) {
-    HeapFree(heap_, NULL, area);
-  }
- private:
-  HANDLE heap_;
-};
-
-
-RASP_INLINE void* Mmap::Commit(size_t size) {
-  return allocator_->Allocate(size);
-}
-
-
-RASP_INLINE void Mmap::UnCommit(void* ptr) {
-  return allocator_->Dealloc(ptr);
-}
-
-#elif defined(HAVE_MMAP)
-#include <sys/mman.h>
-#include <string.h>
-
-#ifdef HAVE_VM_MAKE_TAG
-#include <mach/vm_statistics.h>
-#define FD VM_MAKE_TAG(255)
-#else
-#define FD -1
+#if defined(HAVE_MMAP)
+#include "mmap-mmap.h"
+#elif defined(HAVE_VIRTUALALLOC)
+#include "mmap-virtual-alloc.h"
 #endif
 
-#ifndef MAP_FAILED
-#define MAP_FAILED (void*)-1
-#endif
+
+namespace rasp {
   
 class Mmap::InternalMmap {
  private:
@@ -143,7 +93,7 @@ class Mmap::InternalMmap {
     Header* area = reinterpret_cast<Header*>(heap_);
     while (area != nullptr) {
       Header* tmp = area->ToNextPtr();
-      munmap(area->ToBegin(), 1);
+      MapAllocator::Deallocate(area->ToBegin());
       area = tmp;
     }
   }
@@ -158,23 +108,12 @@ class Mmap::InternalMmap {
     current_map_size_ = map_size;
     void* heap;
     if (heap_ == nullptr) {
-      heap = current_ = heap_ = CreateMapping(map_size);
+      heap = current_ = heap_ = MapAllocator::Allocate(map_size);
     } else {
-      heap = current_ = CreateMapping(map_size);
+      heap = current_ = MapAllocator::Allocate(map_size);
     }
     used_ = 0u;
     return AddHeader(heap, size);
-  }
-
-
-  inline void* CreateMapping(size_t size) {
-    void* heap = mmap(0, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, FD, 0);
-    if (heap == MAP_FAILED) {
-      std::string message;
-      Strerror(&message, errno);
-      FATAL(message.c_str());
-    }
-    return heap;
   }
 
 
@@ -189,6 +128,7 @@ class Mmap::InternalMmap {
     last_ = header;
     return static_cast<void*>(header->ToValue());
   }
+  
 
   size_t current_map_size_;
   size_t used_;
@@ -204,14 +144,11 @@ RASP_INLINE void* Mmap::Commit(size_t size) {
 
 
 RASP_INLINE void Mmap::UnCommit() {
-  if (!uncommited_) {
-    uncommited_ = true;
+  if (!uncommited_.load()) {
+    uncommited_.store(true);
     mmap_->UnCommit();
   }
 }
-
-
-#endif
 
 
 Mmap::Mmap()

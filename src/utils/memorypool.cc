@@ -91,8 +91,8 @@ MemoryPool& MemoryPool::operator = (MemoryPool&& memory_pool) {
 
 
 void MemoryPool::Destroy() RASP_NOEXCEPT {
-  if (!deleted_) {
-    deleted_ = true;
+  if (!deleted_.load()) {
+    deleted_.store(true);
     auto chunk = chunk_head_;
     if (chunk != nullptr) {
       while (chunk != nullptr) {
