@@ -34,15 +34,11 @@
 #include <algorithm>
 #include "utils.h"
 #include "../config.h"
-#include "heap-alloc.h"
+#include "mmap.h"
 
 #ifdef UNIT_TEST
 #include <vector>
 #endif
-
-#define RASP_ALIGN(offset, alignment)           \
-  (offset + (alignment - 1)) & ~(alignment - 1)
-
 
 namespace rasp {
 
@@ -118,12 +114,6 @@ class MemoryPool : private Uncopyable {
    */
   inline void Dealloc(void* object);
   
-
-  // for unit test.
-#ifdef UNIT_TEST
-  std::vector<intptr_t> deleted_chunk_list;
-  void ReserveForTest(Chunk* item) {deleted_chunk_list.push_back(reinterpret_cast<intptr_t>(item));}
-#endif
   
  private :
 
@@ -169,14 +159,14 @@ class MemoryPool : private Uncopyable {
      * Instantiate Chunk from heap.
      * @param size The block size.
      */
-    static Chunk* New(size_t size, HeapAllocator* allocator);
+    static Chunk* New(size_t size, Mmap* allocator);
 
 
     /**
      * Delete Chunk.
      * @param chunk delete target.
      */
-    inline static void Delete(Chunk* chunk, HeapAllocator* allocator) RASP_NOEXCEPT;
+    inline static void Delete(Chunk* chunk, Mmap* allocator) RASP_NOEXCEPT;
     
   
     Chunk(Byte* block, size_t size)
@@ -265,7 +255,7 @@ class MemoryPool : private Uncopyable {
   size_t size_;
   bool deleted_;
   
-  HeapAllocator allocator_;
+  Mmap allocator_;
 
 
 #ifdef PLATFORM_64BIT
@@ -282,7 +272,6 @@ class MemoryPool : private Uncopyable {
   static const uint64_t kDeallocedMask = 0xFFFFFFFD;
 #endif
 
-  static const size_t kPointerSize = kAlignment;
   static const size_t kSizeBitSize = RASP_ALIGN(sizeof(SizeBit), kAlignment);
   static const uint8_t kDeallocedBit = 0x2;
   static const uint32_t kInvalidPointer = 0xDEADC0DE;

@@ -7,7 +7,14 @@ _sub = re.compile(r'[\.\-\/\<\>]')
 _id = platform.system()
 _cl_options = '/ZI /nologo /W3 /WX- /Od /Oy- /D "DEBUG" /D "NOMINMAX" /D "_MBCS" /D "PLATFORM_WIN32" /Gm /EHsc /RTC1 /MTd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Gd /analyze- /errorReport:queue '
 _lib_path = ('/usr/local/lib', '/opt/local/lib', '/usr/lib', '/lib')
+_is_win = _id == 'Windows' or _id == 'Microsoft'
 
+compiler = "g++"
+
+if not _is_win:
+    ret = subprocess.call(['which', 'clang++'], stdout=subprocess.PIPE)
+    if ret is 0:
+        compiler = "clang++"
 
 class ConfigBuilder :
 
@@ -138,13 +145,12 @@ class ConfigBuilder :
             return (success, successed_name)
 
     def _RunChecking(self, name, obj, raw_name, lib) :
-        if _id == 'Windows' or _id == 'Microsoft':
+        if _is_win :
             os.system('@echo off')
             if not lib :
-                ret = subprocess.call('cl.exe ' + _cl_options + name, stdout=subprocess.PIPE)
+                ret = subprocess.call('cl.exe ' + _cl_options + name, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             else :
-                subprocess.call('cl.exe /nologo /Fo ' + name, stdout=subprocess.PIPE)
-                ret = subprocess.call('link.exe /nologo "' + raw_name + '" "' + obj + '.obj"', stdout=subprocess.PIPE)
+                ret = subprocess.call('link.exe /nologo "' + raw_name + '" "' + obj + '.obj"', stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if ret == 0 :
                 os.system('del /Q ' + obj + '.*')
             elif ret != 0 and os.path.isfile(obj + '.obj') and not lib :
@@ -156,18 +162,18 @@ class ConfigBuilder :
             return ret
         else :
             if not lib :
-                ret = commands.getstatusoutput('g++ -c ' + name)[0]
+                ret = subprocess.call([compiler, '-c', name], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 if ret == 0 :
                     os.system('rm ' + obj + '.o')
             else :
                 if raw_name.endswith('.so') :
-                    ret = commands.getstatusoutput('g++ ' + name + ' -l ' + raw_name)[0]
+                    ret = subprocess.call([compiler, name, '-l', raw_name], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 else :
-                    ret = commands.getstatusoutput('g++ ' + raw_name + ' ' + name)[0]
+                    ret = subprocess.call([compiler, raw_name, name], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     if ret != 0 :
                         for path in _lib_path :
                             if os.path.isdir(path) :
-                                ret = commands.getstatusoutput('g++ ' + path + '/' + raw_name + ' ' + name)[0]
+                                ret = subprocess.call([compiler, path + '/' + raw_name, name], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                                 if ret == 0 :
                                     break
                     if ret == 0 :

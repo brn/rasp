@@ -31,22 +31,24 @@ namespace rasp {
 // Chunk and heap block is create from one big memory block.
 // The structure is below
 // |8-BIT VERIFY BIT|Chunk MEMORY BLOCK|The memory block managed BY Chunk|
-MemoryPool::Chunk* MemoryPool::Chunk::New(size_t size, HeapAllocator* allocator) {
+MemoryPool::Chunk* MemoryPool::Chunk::New(size_t size, Mmap* allocator) {
   ASSERT(true, size <= kMaxAllocatableSize);
   static const size_t kChunkSize = RASP_ALIGN(sizeof(Chunk), kAlignment);
   const size_t aligned_size = RASP_ALIGN(size, kAlignment);
   
   // All heap size we want.
   const size_t heap_size = RASP_ALIGN((kVerificationTagSize + kChunkSize + aligned_size), kAlignment);
-  Byte* ptr = reinterpret_cast<Byte*>(allocator->Allocate(heap_size));
+  
+  Byte* ptr = reinterpret_cast<Byte*>(allocator->Commit(heap_size));
   
   if (ptr == NULL) {
     throw std::bad_alloc();
   }
-
+  
   // Verification bit.
   VerificationTag* tag = reinterpret_cast<VerificationTag*>(ptr);
   (*tag) = kVerificationBit;
+  
   void* chunk_area = PtrAdd(ptr, kVerificationTagSize);
   
   // Instantiate Chunk from the memory block.
@@ -95,9 +97,6 @@ void MemoryPool::Destroy() RASP_NOEXCEPT {
     if (chunk != nullptr) {
       while (chunk != nullptr) {
         ASSERT(true, chunk != nullptr);
-#ifdef UNIT_TEST
-        ReserveForTest(chunk);
-#endif    
         auto tmp = chunk;
         chunk = chunk->next();
         Chunk::Delete(tmp, &allocator_);

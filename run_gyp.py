@@ -218,12 +218,28 @@ def BuildConfig(args) :
   ], 'VirtualAlloc is required.')
   builder.CheckStruct(False, [
     {
+      'name': 'munmap',
+      'header' : ['sys/mman.h'],
+      'function': 'munmap'
+    }
+  ], 'munmap is required.')
+  builder.CheckStruct(False, [
+    {
       'name': 'noexcept',
       'code' : '''
         int Test() noexcept {return 0;}
       '''
     }
   ], 'noexcept is required.')
+  builder.CheckStruct(False, [
+    {
+      'name': 'VM_MAKE_TAG',
+      'header' : ['mach/vm_statistics.h'],
+      'code': '''
+        void test(){VM_MAKE_TAG(64);}
+      '''
+    }
+  ], 'VM_MAKE_TAG is required.')
   builder.AddMacroCode("""
   #if defined(__x86_64__) || defined(_M_X64)
     #define PLATFORM_64BIT 1

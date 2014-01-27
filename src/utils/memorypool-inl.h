@@ -159,14 +159,13 @@ struct MemoryPool::MemoryBlock {
 static boost::thread_specific_ptr<MemoryPool> tls_;
 
 
-inline void MemoryPool::Chunk::Delete(Chunk* chunk, HeapAllocator* allocator) RASP_NOEXCEPT {
+inline void MemoryPool::Chunk::Delete(Chunk* chunk, Mmap* allocator) RASP_NOEXCEPT {
   chunk->Destruct();
   chunk->~Chunk();
   Byte* block = reinterpret_cast<Byte*>(chunk);
   Byte* block_begin = block - kVerificationTagSize;
   VerificationTag* tag = reinterpret_cast<VerificationTag*>(block_begin);
   ASSERT(true, (*tag) == kVerificationBit);
-  allocator->Deallocate(block_begin);
 }
 
 
@@ -183,7 +182,7 @@ inline rasp::MemoryPool::MemoryBlock* MemoryPool::Chunk::GetBlock(size_t reserve
   ASSERT(true, HasEnoughSize(reserve));
   
   Byte* ret = block_ + used_;
-
+  
   if (tail_block_ != nullptr) {
     reinterpret_cast<MemoryBlock*>(tail_block_)->set_next_ptr(ret);
   }
@@ -195,6 +194,7 @@ inline rasp::MemoryPool::MemoryBlock* MemoryPool::Chunk::GetBlock(size_t reserve
 
   SizeBit* bit = reinterpret_cast<SizeBit*>(ret);
   (*bit) = reserve;
+
   Byte** next_ptr = reinterpret_cast<Byte**>(ret + kSizeBitSize);
   next_ptr = nullptr;
 

@@ -96,7 +96,6 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_from_chunk) {
   rasp::MemoryPool p(1024);
   Test1* t = p.Allocate<Test1>(&ok);
   p.Destroy();
-  ASSERT_EQ(p.deleted_chunk_list.size(), 1u);
   ASSERT_TRUE(ok);
 }
 
@@ -198,7 +197,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_big_object) {
   LargeObject* t = p.Allocate<LargeObject>(&ok);
   intptr_t expected_addr = reinterpret_cast<intptr_t>(t);
   p.Destroy();
-  ASSERT_EQ(p.deleted_chunk_list.size(), 2u);
+  ASSERT_TRUE(ok);
 }
 
 
@@ -210,7 +209,6 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_big_object) {
     p.Allocate<LargeObject>(&(ok_list[i]));
   }
   p.Destroy();
-  ASSERT_EQ(p.deleted_chunk_list.size(), kSize + 1);
   for (int i = 0, len = kSize; i < len; i++) {
     ASSERT_TRUE(ok_list[i]);
   }
@@ -219,7 +217,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_big_object) {
 
 
 TEST(MemoryPoolTest, MemoryPoolTest_performance1) {
-  static const int kSize = 100000;
+  static const int kSize = 10000000;
   rasp::MemoryPool p(1024);
   bool ok = true;
   bool last = false;
@@ -234,14 +232,13 @@ TEST(MemoryPoolTest, MemoryPoolTest_performance1) {
 
 
 TEST(MemoryPoolTest, MemoryPoolTest_performance2) {
-  static const int kSize = 100000;
+  static const int kSize = 10000000;
   bool ok = true;
   bool last = false;
   for (int i = 0; i < kSize; i++) {
-    Test1* t = new Test1(&ok);
+    std::shared_ptr<Test1> t = std::make_shared<Test1>(&ok);
     t->ok = &ok;
     last = t->check();
-    delete t;
   }
   ASSERT_TRUE(last);
 }
