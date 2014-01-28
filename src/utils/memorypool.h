@@ -113,14 +113,6 @@ class MemoryPool : private Uncopyable {
    * @return Specified class instance.
    */
   RASP_INLINE void* Allocate(size_t size);
-  
-
-  /**
-   * Remove MemoryBlock from the free list.
-   * @param find The pointer which is realloced.
-   * @param last The pointer which is the prev pointer of the find.
-   */
-  inline void EraseFromDeallocedList(MemoryPool::MemoryBlock* find, MemoryPool::MemoryBlock* last);
 
   
   template <typename T>
@@ -130,15 +122,6 @@ class MemoryPool : private Uncopyable {
 
 
   inline void* DistributeBlockWhileLocked(size_t size);
-
-
-  inline void* DistributeBlockFromChunk(size_t size);
-  
-
-  inline void* DistributeBlockFromDeallocedList(size_t size);
-  
-
-  inline MemoryPool::MemoryBlock* FindApproximateDeallocedBlock(size_t size);
 
   
   class Chunk {
@@ -191,7 +174,7 @@ class MemoryPool : private Uncopyable {
      * @param needed size.
      * @returns aligned memory chunk.
      */
-    inline MemoryBlock* GetBlock(size_t reserve, MemoryPool* pool) RASP_NOEXCEPT;
+    inline MemoryBlock* GetBlock(size_t reserve) RASP_NOEXCEPT;
 
 
     RASP_INLINE void set_tail(Byte* block_begin) RASP_NOEXCEPT {
@@ -228,28 +211,63 @@ class MemoryPool : private Uncopyable {
     ChunkBundle() {}
 
     
-    inline MemoryPool::Chunk* chunk(size_t size, size_t default_size, Mmap* mmap);
+    inline MemoryPool::MemoryBlock* Commit(size_t size, size_t default_size, Mmap* mmap);
 
     
     inline void Destroy();
+
+
+    RASP_INLINE void AddToFreeList(MemoryPool::MemoryBlock* memory_block) RASP_NOEXCEPT;
     
    private:
+    
+    inline int FindBestFitBlockIndex(size_t size);
+    
+    
     class ChunkList {
      public:
       ChunkList()
           : head_(nullptr),
-            current_(nullptr){}
-
-      inline void AllocChunkIfNecessary(size_t size, size_t default_size, Mmap* mmap);
+            current_(nullptr),
+            free_head_(nullptr),
+            current_free_(nullptr) {}
 
       RASP_INLINE MemoryPool::Chunk* head() RASP_NO_SE {return head_;}
       RASP_INLINE MemoryPool::Chunk* current() RASP_NO_SE {return current_;}
+
+      RASP_INLINE MemoryPool::MemoryBlock* free_head() RASP_NO_SE {return free_head_;}
+      RASP_INLINE MemoryPool::MemoryBlock* current_free() RASP_NO_SE {return current_free_;}
+
+
+      inline void AppendFreeList(MemoryPool::MemoryBlock* block) RASP_NOEXCEPT;
+      
+
+      inline MemoryPool::MemoryBlock* FindApproximateDeallocedBlock(size_t size) RASP_NOEXCEPT;
+
+
+      inline void AllocChunkIfNecessary(size_t size, size_t default_size, Mmap* mmap);
+
+
+      /**
+       * Remove MemoryBlock from the free list.
+       * @param find The pointer which is realloced.
+       * @param last The pointer which is the prev pointer of the find.
+       */
+      inline void EraseFromDeallocedList(MemoryPool::MemoryBlock* find, MemoryPool::MemoryBlock* last) RASP_NOEXCEPT;
+
+
+      RASP_INLINE MemoryPool::MemoryBlock* SwapFreeHead() RASP_NOEXCEPT;
+      
      private:
       MemoryPool::Chunk* head_;
       MemoryPool::Chunk* current_;
+      MemoryPool::MemoryBlock* free_head_;
+      MemoryPool::MemoryBlock* current_free_;
     };
-    
-    RASP_INLINE MemoryPool::Chunk* InitChunk(size_t size, size_t default_size, int index, Mmap* mmap);
+
+
+    RASP_INLINE MemoryPool::ChunkList* InitChunk(size_t size, size_t default_size, int index, Mmap* mmap);
+
     ChunkList bundles_[10];
   };
   

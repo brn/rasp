@@ -170,7 +170,7 @@ RASP_INLINE bool MemoryPool::Chunk::HasEnoughSize(size_t needs) RASP_NO_SE {
 // The heap structure is bellow
 // |1-BIT SENTINEL-FLAG|1-BIT Allocatable FLAG|14-BIT SIZE BIT|FREE-MEMORY|
 // This method return FREE-MEMORY area.
-inline rasp::MemoryPool::MemoryBlock* MemoryPool::Chunk::GetBlock(size_t reserve, MemoryPool* pool) RASP_NOEXCEPT  {
+inline rasp::MemoryPool::MemoryBlock* MemoryPool::Chunk::GetBlock(size_t reserve) RASP_NOEXCEPT  {
   ASSERT(true, HasEnoughSize(reserve));
   
   Byte* ret = block_ + used_;
@@ -217,7 +217,7 @@ RASP_INLINE void* MemoryPool::Allocate(size_t size) {
 
 
 inline void MemoryPool::Dealloc(void* object) {
-  //std::lock_guard<std::mutex> lock(deallocation_mutex_);
+  std::lock_guard<std::mutex> lock(deallocation_mutex_);
   
   Byte* block = reinterpret_cast<Byte*>(object);
   block -= MemoryPool::kValueOffset;
@@ -226,70 +226,115 @@ inline void MemoryPool::Dealloc(void* object) {
   if (!memory_block->IsMarkedAsDealloced()) {
     memory_block->ToValue()->~Poolable();
     memory_block->MarkAsDealloced();
-    if (dealloced_head_ == nullptr) {
-      current_dealloced_ = dealloced_head_ = memory_block;
-    } else {
-      current_dealloced_->set_next_ptr(memory_block->ToBegin());
-    }
+    chunk_bundle_->AddToFreeList(memory_block);
   }
 }
 
 
 inline void* MemoryPool::DistributeBlockWhileLocked(size_t size) {
-  //std::lock_guard<std::mutex> lock(allocation_mutex_);
+  std::lock_guard<std::mutex> lock(allocation_mutex_);
   
-  size_t aligned_size = RASP_ALIGN_OFFSET(size, kAlignment);
-  if (dealloced_head_ != nullptr) {
-    void* block = DistributeBlockFromDeallocedList(aligned_size);
-    if (block != nullptr) {
-      return block;
-    }
-  }
-  
-  return DistributeBlockFromChunk(aligned_size);
-}
-
-
-inline void* MemoryPool::DistributeBlockFromDeallocedList(size_t size) {
-  MemoryBlock* memory_block = FindApproximateDeallocedBlock(size);
-    
-  if (memory_block != nullptr) {
-    memory_block->UnmarkDealloced();
-    return memory_block->ToValue<void>();
-  }
-  return nullptr;
-}
-
-
-inline void* MemoryPool::DistributeBlockFromChunk(size_t size) {
+  size_t aligned_size = RASP_ALIGN_OFFSET(size, kAlignment);  
   const size_t kPoolableSize = sizeof(Poolable);
-  Chunk* chunk = chunk_bundle_->chunk(size, size_, &allocator_);
-  MemoryBlock* block = nullptr;
+  MemoryBlock* block = chunk_bundle_->Commit(size, size_, &allocator_);
     
   if (kPoolableSize > size) {
     size = kPoolableSize;
   }
   
-  block = chunk->GetBlock(size, this);
   return block->ToValue<void>();
 }
 
 
-inline void MemoryPool::EraseFromDeallocedList(MemoryPool::MemoryBlock* find, MemoryPool::MemoryBlock* last) {
+
+inline MemoryPool::MemoryBlock* MemoryPool::ChunkBundle::Commit(size_t size, size_t default_size, Mmap* mmap) {
+  ASSERT(true, size > 0);
+  int index = FindBestFitBlockIndex(size);
+  ChunkList* chunk_list = InitChunk(size, index == 0? default_size : size * 500, index, mmap);
+
+  if (chunk_list->free_head() != nullptr) {
+    if (index != 0) {
+      return chunk_list->SwapFreeHead();
+    }
+    
+    MemoryBlock* block = chunk_list->FindApproximateDeallocedBlock(size);
+    if (block != nullptr) {
+      return block;
+    }
+  }
+  
+  return chunk_list->current()->GetBlock(size);
+}
+
+
+RASP_INLINE MemoryPool::MemoryBlock* MemoryPool::ChunkBundle::ChunkList::SwapFreeHead() RASP_NOEXCEPT {
+  MemoryBlock* block = free_head_;
+  free_head_ = block->ToNextPtr();
+  return block;
+}
+
+
+
+inline int MemoryPool::ChunkBundle::FindBestFitBlockIndex(size_t size) {
+  int index;
+  if (size < kAlignment) {
+    return 0;
+  }
+  
+  index = size / kAlignment;
+  if (index > 9) {
+    return 0;
+  }
+  return index;
+}
+
+
+inline void MemoryPool::ChunkBundle::Destroy() {
+  for (int i = 0; i < 10; i++) {
+    auto chunk_list = bundles_[i];
+    if (chunk_list.head() != nullptr) {
+      auto chunk = chunk_list.head();
+      while (chunk != nullptr) {
+        ASSERT(true, chunk != nullptr);
+        auto tmp = chunk;
+        chunk = chunk->next();
+        Chunk::Delete(tmp);
+      }
+    }
+  }
+}
+
+
+inline MemoryPool::ChunkBundle::ChunkList* MemoryPool::ChunkBundle::InitChunk(size_t size, size_t default_size, int index, Mmap* mmap) {
+  ChunkList* chunk_list = &bundles_[index];
+  chunk_list->AllocChunkIfNecessary(size, default_size, mmap);
+  return chunk_list;
+}
+
+
+RASP_INLINE void MemoryPool::ChunkBundle::AddToFreeList(MemoryPool::MemoryBlock* memory_block) RASP_NOEXCEPT {
+  int index = FindBestFitBlockIndex(memory_block->size());
+  bundles_[index].AppendFreeList(memory_block);
+}
+
+
+
+inline void MemoryPool::ChunkBundle::ChunkList::EraseFromDeallocedList(MemoryPool::MemoryBlock* find, MemoryPool::MemoryBlock* last) RASP_NOEXCEPT {
   if (last != nullptr) {
     last->set_next_ptr(find->ToNextPtr()->ToBegin());
   } else {
-    dealloced_head_ = find->ToNextPtr();
+    free_head_ = find->ToNextPtr();
   }
   find->set_next_ptr(find->next_addr()->ToBegin());
 }
 
 
-inline MemoryPool::MemoryBlock* MemoryPool::FindApproximateDeallocedBlock(size_t size) {
+
+inline MemoryPool::MemoryBlock* MemoryPool::ChunkBundle::ChunkList::FindApproximateDeallocedBlock(size_t size) RASP_NOEXCEPT {
   MemoryBlock* last = nullptr;
   MemoryBlock* find = nullptr;
-  MemoryBlock* current = dealloced_head_;
-  Size most = kMaxAllocatableSize;
+  MemoryBlock* current = free_head_;
+  Size most = MemoryPool::kMaxAllocatableSize;
   
   while (find != nullptr) {
     Size block_size = current->size();
@@ -314,42 +359,14 @@ inline MemoryPool::MemoryBlock* MemoryPool::FindApproximateDeallocedBlock(size_t
 
 
 
-inline MemoryPool::Chunk* MemoryPool::ChunkBundle::chunk(size_t size, size_t default_size, Mmap* mmap) {
-  ASSERT(true, size > 0);
-  int index;
-  if (size < kAlignment) {
-    index = 0;
+inline void MemoryPool::ChunkBundle::ChunkList::AppendFreeList(MemoryPool::MemoryBlock* block) RASP_NOEXCEPT {
+  if (free_head_ == nullptr) {
+    free_head_ = current_free_ = block;
   } else {
-    index = size / kAlignment;
+    current_free_->set_next_ptr(block->ToBegin());
+    current_free_ = block;
+    block->set_next_ptr(nullptr);
   }
-  
-  if (index > 9) {
-    index = 0;
-  }
-  return InitChunk(size, index == 0? default_size : size * 500, index, mmap);
-}
-
-
-inline void MemoryPool::ChunkBundle::Destroy() {
-  for (int i = 0; i < 10; i++) {
-    auto chunk_list = bundles_[i];
-    if (chunk_list.head() != nullptr) {
-      auto chunk = chunk_list.head();
-      while (chunk != nullptr) {
-        ASSERT(true, chunk != nullptr);
-        auto tmp = chunk;
-        chunk = chunk->next();
-        Chunk::Delete(tmp);
-      }
-    }
-  }
-}
-
-
-inline MemoryPool::Chunk* MemoryPool::ChunkBundle::InitChunk(size_t size, size_t default_size, int index, Mmap* mmap) {
-  ChunkList* chunk_list = &bundles_[index];
-  chunk_list->AllocChunkIfNecessary(size, default_size, mmap);
-  return chunk_list->current();
 }
 
 
