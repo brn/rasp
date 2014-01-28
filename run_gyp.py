@@ -240,6 +240,30 @@ def BuildConfig(args) :
       '''
     }
   ], 'VM_MAKE_TAG is required.')
+  builder.CheckStruct(True, [
+    {
+      'name': 'decltype',
+      'code': '''
+        static const int x = 0;
+        decltype(x) v = 0;
+      '''
+    },
+  ], 'decltype is required.')
+  builder.CheckStruct(True, [
+    {
+      'name': 'std::alignment_of',
+      'header': ['type_traits'],
+      'code': '''
+        static const size_t size = std::alignment_of<char>::value;
+      '''
+    },
+    {
+      'name': '__alignof',
+      'code': '''
+        static const size_t size = __alignof(char);
+      '''
+    },
+  ], 'alignof is required.')
   builder.AddMacroCode("""
   #if defined(__x86_64__) || defined(_M_X64)
     #define PLATFORM_64BIT 1

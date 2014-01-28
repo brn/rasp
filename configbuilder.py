@@ -9,12 +9,12 @@ _cl_options = '/ZI /nologo /W3 /WX- /Od /Oy- /D "DEBUG" /D "NOMINMAX" /D "_MBCS"
 _lib_path = ('/usr/local/lib', '/opt/local/lib', '/usr/lib', '/lib')
 _is_win = _id == 'Windows' or _id == 'Microsoft'
 
-compiler = "g++"
+compiler = ["g++"]
 
 if not _is_win:
     ret = subprocess.call(['which', 'clang++'], stdout=subprocess.PIPE)
     if ret is 0:
-        compiler = "clang++"
+        compiler = ["clang++", '-std=c++11', '-stdlib=libc++']
 
 class ConfigBuilder :
 
@@ -162,18 +162,18 @@ class ConfigBuilder :
             return ret
         else :
             if not lib :
-                ret = subprocess.call([compiler, '-c', name], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                ret = subprocess.call(compiler + ['-c', name], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 if ret == 0 :
                     os.system('rm ' + obj + '.o')
             else :
                 if raw_name.endswith('.so') :
-                    ret = subprocess.call([compiler, name, '-l', raw_name], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    ret = subprocess.call(compiler + [name, '-l', raw_name], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 else :
-                    ret = subprocess.call([compiler, raw_name, name], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    ret = subprocess.call(compiler + [raw_name, name], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     if ret != 0 :
                         for path in _lib_path :
                             if os.path.isdir(path) :
-                                ret = subprocess.call([compiler, path + '/' + raw_name, name], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                ret = subprocess.call(compiler + [path + '/' + raw_name, name], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                                 if ret == 0 :
                                     break
                     if ret == 0 :

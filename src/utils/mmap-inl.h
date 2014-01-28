@@ -67,7 +67,7 @@ class Mmap::InternalMmap {
 
   
  public:
-  InternalMmap():
+  RASP_INLINE InternalMmap():
       current_map_size_(kDefaultByte),
       used_(0u),
       heap_(nullptr),
@@ -75,11 +75,11 @@ class Mmap::InternalMmap {
       last_(nullptr) {}
 
 
-  ~InternalMmap() {}
+  ~InternalMmap() = default;
   
   
   RASP_INLINE void* Commit(size_t size) {
-    size_t needs = RASP_ALIGN((kPointerSize + size), 4);
+    size_t needs = RASP_ALIGN_OFFSET((kPointerSize + size), kAlignment);
     if (current_map_size_ < needs || (current_map_size_ - used_) < needs || heap_ == nullptr) {
       return Alloc(needs);
     }
@@ -100,7 +100,7 @@ class Mmap::InternalMmap {
 
  private:
   
-  void* Alloc(size_t size) {
+  RASP_INLINE void* Alloc(size_t size) {
     size_t map_size = kDefaultByte;
     if (size > kDefaultByte) {
       map_size = size;
@@ -117,7 +117,7 @@ class Mmap::InternalMmap {
   }
 
 
-  inline void* AddHeader(void* heap, size_t size) {
+  RASP_INLINE void* AddHeader(void* heap, size_t size) {
     Header* header = reinterpret_cast<Header*>(heap);
     Byte** next_ptr = reinterpret_cast<Byte**>(heap);
     next_ptr = nullptr;

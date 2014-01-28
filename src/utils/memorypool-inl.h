@@ -34,62 +34,15 @@
 namespace rasp {
 
 
-
-RASP_INLINE MemoryPool::DisposableBase::DisposableBase(size_t array_size)
-    : array_size_(array_size) {};
-
-
-RASP_INLINE void MemoryPool::DisposableBase::Dispose(void* block_begin, void* ptr, bool is_free) const {
-  DisposeInternal(block_begin, ptr, is_free);
-}
-
-
-template <typename T, bool kIsClassType, bool is_array>
-class MemoryPool::Disposable : public MemoryPool::DisposableBase {};
-
-
-template <typename T, bool is_array>
-class MemoryPool::Disposable<T, true, is_array> : public MemoryPool::DisposableBase {
- public:
-  explicit Disposable(size_t array_size)
-      : DisposableBase(array_size){}
- private:
-  RASP_INLINE virtual void DisposeInternal(void* block_begin, void* ptr, bool is_free) RASP_NO_SE {
-    T* object = reinterpret_cast<T*>(ptr);
-    if (!std::is_pod<T>::value) {
-      if (!is_array) {
-        object->~T();
-        Pointer p = reinterpret_cast<Pointer>(ptr);
-        p = kInvalidPointer;
-      } else {
-        for (size_t i = 0u; i < array_size_; i++) {
-          object[i].~T();
-          Pointer p = reinterpret_cast<Pointer>(ptr);
-          p = kInvalidPointer;
-        }
-      }
-    }
-  }
-};
-
-
-template <typename T, bool is_array>
-class MemoryPool::Disposable<T, false, is_array> : public MemoryPool::DisposableBase {
- public:
-  Disposable(size_t array_size)
-      : DisposableBase(array_size){}
- private:
-  RASP_INLINE virtual void DisposeInternal(void* block_begin, void* ptr, bool is_free) RASP_NO_SE {
-    Pointer p = reinterpret_cast<Pointer>(ptr);
-    p = kInvalidPointer;
-  }
-};
-
-
 struct MemoryPool::MemoryBlock {
 
   RASP_INLINE Size size() RASP_NOEXCEPT {
     return *(ToSizeBit());
+  }
+
+
+  RASP_INLINE Size set_size(size_t size) RASP_NOEXCEPT {
+    return *(ToSizeBit()) = size;
   }
     
     
@@ -99,7 +52,7 @@ struct MemoryPool::MemoryBlock {
 
 
   RASP_INLINE MemoryBlock* next_addr() RASP_NOEXCEPT {
-    return reinterpret_cast<MemoryBlock*>(ToValue() + size());
+    return reinterpret_cast<MemoryBlock*>(ToValue<Byte*>() + size());
   }
     
 
@@ -107,46 +60,34 @@ struct MemoryPool::MemoryBlock {
     return reinterpret_cast<MemoryBlock*>(*(reinterpret_cast<Byte**>(ToBegin() + kSizeBitSize)));
   }
 
-    
+
   RASP_INLINE void set_next_ptr(Byte* next_ptr) RASP_NOEXCEPT {
     Byte** next_head = reinterpret_cast<Byte**>(ToBegin() + kSizeBitSize);
     *next_head = next_ptr;
   }
+  
 
-
-  RASP_INLINE void set_next_ptr(MemoryBlock* next_ptr) RASP_NOEXCEPT {
-    Byte** next_head = reinterpret_cast<Byte**>(ToBegin() + kSizeBitSize);
-    *next_head = next_ptr->ToBegin();
-  }
-    
-
-  template <typename T = DisposableBase*>
-  RASP_INLINE typename std::remove_pointer<T>::type* ToDisposable() RASP_NOEXCEPT {
-    Pointer p = reinterpret_cast<Pointer>(ToBegin() + kDisposableOffset);
+  template <typename T = Poolable*>
+  RASP_INLINE typename std::remove_pointer<T>::type* ToValue() RASP_NOEXCEPT {
+    Pointer p = reinterpret_cast<Pointer>(ToBegin() + kValueOffset);
     return reinterpret_cast<typename std::remove_pointer<T>::type*>(p & kTagRemoveBit);
   }
 
 
-  template <typename T = Byte*>
-  RASP_INLINE typename std::remove_pointer<T>::type* ToValue() RASP_NOEXCEPT {
-    return reinterpret_cast<typename std::remove_pointer<T>::type*>(ToBegin() + kValueOffset);
-  }
-
-
   RASP_INLINE void MarkAsDealloced() RASP_NOEXCEPT {
-    Pointer p = reinterpret_cast<Pointer>(ToBegin() + kSizeBitSize);
+    Pointer p = reinterpret_cast<Pointer>(ToBegin() + kValueOffset);
     p |= kDeallocedBit;
   }
 
 
   RASP_INLINE void UnmarkDealloced() RASP_NOEXCEPT {
-    Pointer p = reinterpret_cast<Pointer>(ToBegin() + kSizeBitSize);
+    Pointer p = reinterpret_cast<Pointer>(ToBegin() + kValueOffset);
     p &= kDeallocedMask;
   }
 
 
   RASP_INLINE bool IsMarkedAsDealloced() RASP_NOEXCEPT {
-    return (reinterpret_cast<Pointer>(ToBegin() + kSizeBitSize) & kDeallocedBit) == kDeallocedBit;
+    return (reinterpret_cast<Pointer>(ToBegin() + kValueOffset) & kDeallocedBit) == kDeallocedBit;
   }
 
 
@@ -156,10 +97,60 @@ struct MemoryPool::MemoryBlock {
 };
 
 
+inline void* Poolable::operator new(size_t size, MemoryPool* pool) {
+  return pool->DistributeBlockWhileLocked(size);
+}
+
+
+inline void* Poolable::operator new[](size_t size, MemoryPool* pool) {
+  return pool->DistributeBlockWhileLocked(size);
+}
+
+
+inline void Poolable::operator delete(void* object, MemoryPool* pool) {}
+
+
 static boost::thread_specific_ptr<MemoryPool> tls_;
 
 
-inline void MemoryPool::Chunk::Delete(Chunk* chunk, Mmap* allocator) RASP_NOEXCEPT {
+// Create Chunk from byte block.
+// Chunk and heap block is create from one big memory block.
+// The structure is below
+// |8-BIT VERIFY BIT|Chunk MEMORY BLOCK|The memory block managed BY Chunk|
+inline MemoryPool::Chunk* MemoryPool::Chunk::New(size_t size, Mmap* allocator) {
+  ASSERT(true, size <= kMaxAllocatableSize);
+  static const size_t kChunkSize = sizeof(Chunk);
+  const size_t aligned_size = RASP_ALIGN_OFFSET(size, kAlignment);
+
+#if defined(DEBUG)
+  // All heap size we want.
+  const size_t heap_size = RASP_ALIGN_OFFSET((kVerificationTagSize + kChunkSize + aligned_size), kAlignment);
+#else
+  // All heap size we want.
+  const size_t heap_size = RASP_ALIGN_OFFSET((kChunkSize + aligned_size), kAlignment);
+#endif
+  Byte* ptr = reinterpret_cast<Byte*>(allocator->Commit(heap_size));
+  
+  if (ptr == NULL) {
+    throw std::bad_alloc();
+  }
+
+#if defined(DEBUG)
+  // Verification bit.
+  VerificationTag* tag = reinterpret_cast<VerificationTag*>(ptr);
+  (*tag) = kVerificationBit;
+  void* chunk_area = PtrAdd(ptr, kVerificationTagSize);
+#else
+  void* chunk_area = ptr;
+#endif
+  
+  // Instantiate Chunk from the memory block.
+  return new(chunk_area) Chunk(reinterpret_cast<Byte*>(PtrAdd(chunk_area, kChunkSize)), aligned_size);
+}
+
+
+
+inline void MemoryPool::Chunk::Delete(Chunk* chunk) RASP_NOEXCEPT {
   chunk->Destruct();
   chunk->~Chunk();
 #ifdef DEBUG
@@ -171,7 +162,7 @@ inline void MemoryPool::Chunk::Delete(Chunk* chunk, Mmap* allocator) RASP_NOEXCE
 
 
 RASP_INLINE bool MemoryPool::Chunk::HasEnoughSize(size_t needs) RASP_NO_SE {
-  return block_size_ >= used_ + kValueOffset + needs;
+  return block_size_ >= used_ + (RASP_ALIGN_OFFSET((kValueOffset + needs), kAlignment));
 }
 
 
@@ -179,7 +170,7 @@ RASP_INLINE bool MemoryPool::Chunk::HasEnoughSize(size_t needs) RASP_NO_SE {
 // The heap structure is bellow
 // |1-BIT SENTINEL-FLAG|1-BIT Allocatable FLAG|14-BIT SIZE BIT|FREE-MEMORY|
 // This method return FREE-MEMORY area.
-inline rasp::MemoryPool::MemoryBlock* MemoryPool::Chunk::GetBlock(size_t reserve) RASP_NOEXCEPT  {
+inline rasp::MemoryPool::MemoryBlock* MemoryPool::Chunk::GetBlock(size_t reserve, MemoryPool* pool) RASP_NOEXCEPT  {
   ASSERT(true, HasEnoughSize(reserve));
   
   Byte* ret = block_ + used_;
@@ -188,38 +179,26 @@ inline rasp::MemoryPool::MemoryBlock* MemoryPool::Chunk::GetBlock(size_t reserve
     reinterpret_cast<MemoryBlock*>(tail_block_)->set_next_ptr(ret);
   }
   
-  size_t reserved_size = RASP_ALIGN((kValueOffset + reserve), kAlignment);
-
+  size_t reserved_size = RASP_ALIGN_OFFSET((kValueOffset + reserve), kAlignment);
+  size_t real_size = reserve + (reserved_size - (kValueOffset + reserve));
   used_ += reserved_size;
   tail_block_ = ret;
-
-  SizeBit* bit = reinterpret_cast<SizeBit*>(ret);
-  (*bit) = reserve;
-
-  Byte** next_ptr = reinterpret_cast<Byte**>(ret + kSizeBitSize);
-  next_ptr = nullptr;
-
-  return reinterpret_cast<MemoryBlock*>(ret);
+  
+  MemoryBlock* memory_block = reinterpret_cast<MemoryBlock*>(ret);
+  memory_block->set_size(real_size);
+  memory_block->set_next_ptr(nullptr);
+  return memory_block;
 }
 
 
 //MemoryPool constructor.
 inline MemoryPool::MemoryPool(size_t size)
-    : chunk_head_(nullptr),
-      current_chunk_(nullptr),
+    : chunk_bundle_(new ChunkBundle()),
       dealloced_head_(nullptr),
       current_dealloced_(nullptr),
       size_(size + (size / kPointerSize) * 2),
       deleted_(false) {
   ASSERT(true, size <= kMaxAllocatableSize);
-}
-
-
-inline uint64_t MemoryPool::CommitedSize() RASP_NO_SE {
-  Chunk* c = chunk_head_;
-  uint64_t size = 0;
-  while (c != nullptr) {size += c->size();c = c->next();}
-  return size;
 }
 
 
@@ -232,45 +211,20 @@ inline MemoryPool* MemoryPool::local_instance(size_t size) {
 }
 
 
-template <typename T, typename ... Args>
-RASP_INLINE T* MemoryPool::Allocate(Args ... args) {
-  static_assert(std::is_destructible<T>::value == true,
-                "The allocatable type of MemoryPool::Allocate must be a destructible type.");
-  return new(DistributeBlockWhileLocked<typename std::remove_const<T>::type,
-             std::is_class<T>::value && !std::is_enum<T>::value, false>(sizeof(T))) T(args...);
-}
-
-
-template <typename T>
-RASP_INLINE T* MemoryPool::AllocateArray(size_t size) {
-  static_assert(std::is_destructible<T>::value == true,
-                "The allocatable type of MemoryPool::AllocateArray must be a destructible type.");
-  ASSERT(true, size > 0u);
-  static const bool is_class_type = std::is_class<T>::value && !std::is_enum<T>::value;
-  static const size_t kSize = sizeof(T);
-  T* ptr = reinterpret_cast<T*>(DistributeBlockWhileLocked<typename std::remove_const<T>::type,
-                                is_class_type, true>(kSize * size, size));
-  T* head = ptr;
-  if (is_class_type) {
-    for (size_t i = 0u; i < size; i++) {
-      new(reinterpret_cast<void*>(ptr)) T();
-      ++ptr;
-    }
-  }
-  return head;
+RASP_INLINE void* MemoryPool::Allocate(size_t size) {
+  return DistributeBlockWhileLocked(size);
 }
 
 
 inline void MemoryPool::Dealloc(void* object) {
-  //std::lock_guard<std::recursive_mutex> lock(deallocation_mutex_);
+  //std::lock_guard<std::mutex> lock(deallocation_mutex_);
   
   Byte* block = reinterpret_cast<Byte*>(object);
-  block -= kValueOffset;
-  MemoryBlock* memory_block = reinterpret_cast<MemoryBlock*>(block);
+  block -= MemoryPool::kValueOffset;
+  MemoryPool::MemoryBlock* memory_block = reinterpret_cast<MemoryPool::MemoryBlock*>(block);
   
   if (!memory_block->IsMarkedAsDealloced()) {
-    memory_block->ToDisposable()->Dispose(
-        memory_block->ToSizeBit(), memory_block->ToValue<void>(), false);
+    memory_block->ToValue()->~Poolable();
     memory_block->MarkAsDealloced();
     if (dealloced_head_ == nullptr) {
       current_dealloced_ = dealloced_head_ = memory_block;
@@ -281,61 +235,53 @@ inline void MemoryPool::Dealloc(void* object) {
 }
 
 
-template <typename T, bool is_class_type, bool is_array>
-inline void* MemoryPool::DistributeBlockWhileLocked(size_t size, size_t array_size) {
-  std::lock_guard<std::mutex> lock(allocation_mutex_);
+inline void* MemoryPool::DistributeBlockWhileLocked(size_t size) {
+  //std::lock_guard<std::mutex> lock(allocation_mutex_);
   
-  size_t aligned_size = RASP_ALIGN(size, kAlignment);
+  size_t aligned_size = RASP_ALIGN_OFFSET(size, kAlignment);
   if (dealloced_head_ != nullptr) {
-    void* block = DistributeBlockFromDeallocedList<T, is_class_type, is_array>(aligned_size, array_size);
+    void* block = DistributeBlockFromDeallocedList(aligned_size);
     if (block != nullptr) {
       return block;
     }
   }
   
-  return DistributeBlockFromChunk<T, is_class_type, is_array>(aligned_size, array_size);
+  return DistributeBlockFromChunk(aligned_size);
 }
 
 
-template <typename T, bool is_class_type, bool is_array>
-inline void* MemoryPool::DistributeBlockFromDeallocedList(size_t size, size_t array_size) {
+inline void* MemoryPool::DistributeBlockFromDeallocedList(size_t size) {
   MemoryBlock* memory_block = FindApproximateDeallocedBlock(size);
     
   if (memory_block != nullptr) {
     memory_block->UnmarkDealloced();
-    memory_block->ToDisposable()->~DisposableBase();
-    new(memory_block->ToDisposable<void>()) Disposable<T, is_class_type, is_array>(array_size);
     return memory_block->ToValue<void>();
   }
   return nullptr;
 }
 
 
-
-template <typename T, bool is_class_type, bool is_array>
-inline void* MemoryPool::DistributeBlockFromChunk(size_t size, size_t array_size) {
-  AllocChunkIfNecessary(size);
+inline void* MemoryPool::DistributeBlockFromChunk(size_t size) {
+  const size_t kPoolableSize = sizeof(Poolable);
+  Chunk* chunk = chunk_bundle_->chunk(size, size_, &allocator_);
   MemoryBlock* block = nullptr;
     
-  if (is_class_type) {
-    const size_t kClassTypeSize = sizeof(T);
-    if (size < kClassTypeSize) {
-      size = kClassTypeSize;
-    }
+  if (kPoolableSize > size) {
+    size = kPoolableSize;
   }
-  block = current_chunk_->GetBlock(size);
-  new (block->ToDisposable<void>()) Disposable<T, is_class_type, is_array>(array_size);
+  
+  block = chunk->GetBlock(size, this);
   return block->ToValue<void>();
 }
 
 
 inline void MemoryPool::EraseFromDeallocedList(MemoryPool::MemoryBlock* find, MemoryPool::MemoryBlock* last) {
   if (last != nullptr) {
-    last->set_next_ptr(find->ToNextPtr());
+    last->set_next_ptr(find->ToNextPtr()->ToBegin());
   } else {
     dealloced_head_ = find->ToNextPtr();
   }
-  find->set_next_ptr(find->next_addr());
+  find->set_next_ptr(find->next_addr()->ToBegin());
 }
 
 
@@ -367,15 +313,55 @@ inline MemoryPool::MemoryBlock* MemoryPool::FindApproximateDeallocedBlock(size_t
 }
 
 
-inline void MemoryPool::AllocChunkIfNecessary(size_t size) {
-  if (chunk_head_ == nullptr) {
-    current_chunk_ = chunk_head_ = MemoryPool::Chunk::New(size_, &allocator_);
+
+inline MemoryPool::Chunk* MemoryPool::ChunkBundle::chunk(size_t size, size_t default_size, Mmap* mmap) {
+  ASSERT(true, size > 0);
+  int index;
+  if (size < kAlignment) {
+    index = 0;
+  } else {
+    index = size / kAlignment;
+  }
+  
+  if (index > 9) {
+    index = 0;
+  }
+  return InitChunk(size, index == 0? default_size : size * 500, index, mmap);
+}
+
+
+inline void MemoryPool::ChunkBundle::Destroy() {
+  for (int i = 0; i < 10; i++) {
+    auto chunk_list = bundles_[i];
+    if (chunk_list.head() != nullptr) {
+      auto chunk = chunk_list.head();
+      while (chunk != nullptr) {
+        ASSERT(true, chunk != nullptr);
+        auto tmp = chunk;
+        chunk = chunk->next();
+        Chunk::Delete(tmp);
+      }
+    }
+  }
+}
+
+
+inline MemoryPool::Chunk* MemoryPool::ChunkBundle::InitChunk(size_t size, size_t default_size, int index, Mmap* mmap) {
+  ChunkList* chunk_list = &bundles_[index];
+  chunk_list->AllocChunkIfNecessary(size, default_size, mmap);
+  return chunk_list->current();
+}
+
+
+inline void MemoryPool::ChunkBundle::ChunkList::AllocChunkIfNecessary(size_t size, size_t default_size, Mmap* mmap) {
+  if (head_ == nullptr) {
+    current_ = head_ = MemoryPool::Chunk::New(default_size, mmap);
   }
     
-  if (!current_chunk_->HasEnoughSize(size)) {
-    size_t needs = size > size_? size + kValueOffset: size_;
-    current_chunk_->set_next(MemoryPool::Chunk::New(needs, &allocator_));
-    current_chunk_ = current_chunk_->next();
+  if (!current_->HasEnoughSize(size)) {
+    size_t needs = size > default_size? size + kValueOffset: default_size;
+    current_->set_next(MemoryPool::Chunk::New(needs, mmap));
+    current_ = current_->next();
   }
 }
 

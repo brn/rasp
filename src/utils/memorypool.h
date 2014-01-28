@@ -44,6 +44,20 @@
 
 namespace rasp {
 
+class MemoryPool;
+
+class Poolable {
+ public:
+  inline void* operator new (size_t size, MemoryPool* pool);
+  inline void* operator new[] (size_t size, MemoryPool* pool);
+  inline void operator delete (void* ptr){};
+  inline void operator delete[] (void* ptr){};
+  inline void operator delete (void* ptr, MemoryPool* pool);
+  inline void operator delete[] (void* ptr, MemoryPool* pool);
+  virtual ~Poolable(){}
+};
+
+
 /**
  * The pointer lifetime managable allocator.
  * This memory space is allocation only,
@@ -51,15 +65,13 @@ namespace rasp {
  * destroy MemoryPool class.
  */
 class MemoryPool : private Uncopyable {
+  friend class Poolable;
  private:
   class Chunk;
-  class DisposableBase;
-  template <typename T, bool kIsClassType, bool is_array>
-  class Disposable;
   struct MemoryBlock;
   
  public :
-  explicit MemoryPool(size_t size);
+  explicit MemoryPool(size_t size = 512);
 
   
   ~MemoryPool() {Destroy();}
@@ -77,36 +89,13 @@ class MemoryPool : private Uncopyable {
    * Free all allocated memory.
    */
   void Destroy() RASP_NOEXCEPT;
-
-
-  /**
-     Get used memory size of the memory block except the header size.
-   * @return The used memory size.
-   */
-  inline uint64_t CommitedSize() RASP_NO_SE;
   
   
   /**
    * allocate to tls space.
    */
   inline static MemoryPool* local_instance(size_t size);
-
-
-  /**
-   * Create an instance from the reserved memory block.
-   * @return Specified class instance.
-   */
-  template <typename T, typename ... Args>
-  RASP_INLINE T* Allocate(Args ... args);
-
-
-  /**
-   * Create an array from the reserved memory block.
-   * @return Specified class array.
-   */
-  template <typename T>
-  RASP_INLINE T* AllocateArray(size_t size);
-
+  
 
   /**
    * Free the specified pointer.
@@ -116,8 +105,15 @@ class MemoryPool : private Uncopyable {
    */
   inline void Dealloc(void* object);
   
-  
  private :
+
+
+  /**
+   * Create an instance from the reserved memory block.
+   * @return Specified class instance.
+   */
+  RASP_INLINE void* Allocate(size_t size);
+  
 
   /**
    * Remove MemoryBlock from the free list.
@@ -133,42 +129,36 @@ class MemoryPool : private Uncopyable {
   }
 
 
-  template <typename T, bool is_class_type, bool is_array>
-  inline void* DistributeBlockWhileLocked(size_t size, size_t array_size = 0);
+  inline void* DistributeBlockWhileLocked(size_t size);
 
 
-  template <typename T, bool is_class_type, bool is_array>
-  inline void* DistributeBlockFromChunk(size_t size, size_t array_size);
+  inline void* DistributeBlockFromChunk(size_t size);
   
 
-  template <typename T, bool is_class_type, bool is_array>
-  inline void* DistributeBlockFromDeallocedList(size_t size, size_t array_size);
+  inline void* DistributeBlockFromDeallocedList(size_t size);
   
 
   inline MemoryPool::MemoryBlock* FindApproximateDeallocedBlock(size_t size);
 
   
-  inline void AllocChunkIfNecessary(size_t size);
-  
-
   class Chunk {
    public:
     typedef uint8_t VerificationTag;
-    static const size_t kVerificationTagSize = RASP_ALIGN(sizeof(VerificationTag), kAlignment);
+    static const size_t kVerificationTagSize = RASP_ALIGN_OFFSET(sizeof(VerificationTag), kAlignment);
     static const uint8_t kVerificationBit = 0xAA;
 
     /**
      * Instantiate Chunk from heap.
      * @param size The block size.
      */
-    static Chunk* New(size_t size, Mmap* allocator);
+    inline static Chunk* New(size_t size, Mmap* allocator);
 
 
     /**
      * Delete Chunk.
      * @param chunk delete target.
      */
-    inline static void Delete(Chunk* chunk, Mmap* allocator) RASP_NOEXCEPT;
+    inline static void Delete(Chunk* chunk) RASP_NOEXCEPT;
     
   
     Chunk(Byte* block, size_t size)
@@ -201,7 +191,7 @@ class MemoryPool : private Uncopyable {
      * @param needed size.
      * @returns aligned memory chunk.
      */
-    inline MemoryBlock* GetBlock(size_t reserve) RASP_NOEXCEPT;
+    inline MemoryBlock* GetBlock(size_t reserve, MemoryPool* pool) RASP_NOEXCEPT;
 
 
     RASP_INLINE void set_tail(Byte* block_begin) RASP_NOEXCEPT {
@@ -233,21 +223,39 @@ class MemoryPool : private Uncopyable {
   };
 
 
-  class DisposableBase {
+  class ChunkBundle {
    public:
-    RASP_INLINE DisposableBase(size_t array_size);
-    RASP_INLINE void Dispose(void* block_begin, void* ptr, bool is_free = true) const;
-    virtual ~DisposableBase(){}
-   protected:
-    size_t array_size_;
+    ChunkBundle() {}
+
+    
+    inline MemoryPool::Chunk* chunk(size_t size, size_t default_size, Mmap* mmap);
+
+    
+    inline void Destroy();
+    
    private:
-    RASP_INLINE virtual void DisposeInternal(void* block_begin, void* ptr, bool is_free) const = 0;
+    class ChunkList {
+     public:
+      ChunkList()
+          : head_(nullptr),
+            current_(nullptr){}
+
+      inline void AllocChunkIfNecessary(size_t size, size_t default_size, Mmap* mmap);
+
+      RASP_INLINE MemoryPool::Chunk* head() RASP_NO_SE {return head_;}
+      RASP_INLINE MemoryPool::Chunk* current() RASP_NO_SE {return current_;}
+     private:
+      MemoryPool::Chunk* head_;
+      MemoryPool::Chunk* current_;
+    };
+    
+    RASP_INLINE MemoryPool::Chunk* InitChunk(size_t size, size_t default_size, int index, Mmap* mmap);
+    ChunkList bundles_[10];
   };
   
 
   // The chunk list.
-  Chunk* chunk_head_;
-  Chunk* current_chunk_;
+  ChunkBundle* chunk_bundle_;
 
 
   MemoryBlock* dealloced_head_;
@@ -276,12 +284,10 @@ class MemoryPool : private Uncopyable {
   static const uint64_t kDeallocedMask = 0xFFFFFFFD;
 #endif
 
-  static const size_t kSizeBitSize = RASP_ALIGN(sizeof(SizeBit), kAlignment);
+  static const size_t kSizeBitSize = RASP_ALIGN_OFFSET(sizeof(SizeBit), kAlignment);
   static const uint8_t kDeallocedBit = 0x2;
   static const uint32_t kInvalidPointer = 0xDEADC0DE;
-  static const size_t kDisposableBaseSize = RASP_ALIGN(sizeof(MemoryPool::DisposableBase), kAlignment);
-  static const size_t kDisposableOffset = kSizeBitSize + kPointerSize;
-  static const size_t kValueOffset = kDisposableOffset + kDisposableBaseSize;
+  static const size_t kValueOffset = kSizeBitSize + kPointerSize;
 };
 
 } // namesapce rasp

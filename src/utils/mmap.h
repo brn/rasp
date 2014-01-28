@@ -34,8 +34,8 @@ class Mmap {
  public:
   inline Mmap();
   inline ~Mmap();
-  inline void* Commit(size_t size);
-  inline void UnCommit();
+  RASP_INLINE void* Commit(size_t size);
+  RASP_INLINE void UnCommit();
 
  private:
   InternalMmap* mmap_;
