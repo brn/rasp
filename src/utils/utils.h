@@ -55,12 +55,12 @@ namespace rasp {
 #define RASP_NO_SE const RASP_NOEXCEPT
 
 #ifndef __PRETTY_FUNCTION__
-#ifndef __func__
+#ifdef __func__
 #define __PRETTY_FUNCTION__ __func__
 #elif defined(__FUNCTION__)
 #define __PRETTY_FUNCTION__ __FUNCTION__
 #else
-#define __PRETTY_FUNCTION__ "anonymous"
+#define __PRETTY_FUNCTION__ "unknown"
 #endif
 #endif
 

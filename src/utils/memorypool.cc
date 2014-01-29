@@ -67,4 +67,21 @@ void MemoryPool::Destroy() RASP_NOEXCEPT {
     delete chunk_bundle_;
   }
 }
-}
+
+
+const std::array<int, 34> MemoryPool::ChunkBundle::kSizeMap = {{
+    0, 1, 1, 1, 1, 1, 1, 1, 1,
+    2, 2, 2, 2, 2, 2, 2, 2,
+    3, 3, 3, 3, 3, 3, 3, 3,
+    3, 3, 3, 3, 3, 3, 3, 3,
+  }};
+
+
+const std::array<int, 5> MemoryPool::ChunkBundle::kIndexSizeMap = {{
+    0, 8, 16, 32
+  }};
+
+boost::thread_specific_ptr<MemoryPool::ChunkBundle::ChunkList> MemoryPool::ChunkBundle::tls_;
+
+} //namespace rasp
+

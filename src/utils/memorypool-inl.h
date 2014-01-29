@@ -98,12 +98,12 @@ struct MemoryPool::MemoryBlock {
 
 
 inline void* Poolable::operator new(size_t size, MemoryPool* pool) {
-  return pool->DistributeBlockWhileLocked(size);
+  return pool->Allocate(size);
 }
 
 
 inline void* Poolable::operator new[](size_t size, MemoryPool* pool) {
-  return pool->DistributeBlockWhileLocked(size);
+  return pool->Allocate(size);
 }
 
 
@@ -196,7 +196,7 @@ inline MemoryPool::MemoryPool(size_t size)
     : chunk_bundle_(new ChunkBundle()),
       dealloced_head_(nullptr),
       current_dealloced_(nullptr),
-      size_(size + (size / kPointerSize) * 2),
+      size_(size),
       deleted_(false) {
   ASSERT(true, size <= kMaxAllocatableSize);
 }
@@ -212,13 +212,11 @@ inline MemoryPool* MemoryPool::local_instance(size_t size) {
 
 
 RASP_INLINE void* MemoryPool::Allocate(size_t size) {
-  return DistributeBlockWhileLocked(size);
+  return DistributeBlock(size);
 }
 
 
-inline void MemoryPool::Dealloc(void* object) {
-  //std::lock_guard<std::mutex> lock(deallocation_mutex_);
-  
+inline void MemoryPool::Dealloc(void* object) {  
   Byte* block = reinterpret_cast<Byte*>(object);
   block -= MemoryPool::kValueOffset;
   MemoryPool::MemoryBlock* memory_block = reinterpret_cast<MemoryPool::MemoryBlock*>(block);
@@ -231,9 +229,7 @@ inline void MemoryPool::Dealloc(void* object) {
 }
 
 
-inline void* MemoryPool::DistributeBlockWhileLocked(size_t size) {
-  //std::lock_guard<std::mutex> lock(allocation_mutex_);
-  
+inline void* MemoryPool::DistributeBlock(size_t size) {
   const size_t kPoolableSize = sizeof(Poolable);
   MemoryBlock* block = chunk_bundle_->Commit(size, size_, &allocator_);
     
@@ -249,7 +245,7 @@ inline void* MemoryPool::DistributeBlockWhileLocked(size_t size) {
 inline MemoryPool::MemoryBlock* MemoryPool::ChunkBundle::Commit(size_t size, size_t default_size, Mmap* mmap) {
   ASSERT(true, size > 0);
   int index = FindBestFitBlockIndex(size);
-  ChunkList* chunk_list = InitChunk(size, index == 0? default_size : size * 500, index, mmap);
+  ChunkList* chunk_list = InitChunk(size, default_size, index, mmap);
 
   if (chunk_list->free_head() != nullptr) {
     if (index != 0) {
@@ -275,21 +271,20 @@ RASP_INLINE MemoryPool::MemoryBlock* MemoryPool::ChunkBundle::ChunkList::SwapFre
 
 
 inline int MemoryPool::ChunkBundle::FindBestFitBlockIndex(size_t size) {
-  int index;
-  ND_ASSERT(true, size > kAlignment);
-  index = (size / kAlignment);
-  if (index > 9) {
-    return 0;
+  ND_ASSERT(true, size > 0);
+  if (size <= 32) {
+    return kSizeMap[size];
   }
-  return index;
+  return 0;
 }
 
 
 inline void MemoryPool::ChunkBundle::Destroy() {
-  for (int i = 0; i < 10; i++) {
-    auto chunk_list = bundles_[i];
-    if (chunk_list.head() != nullptr) {
-      auto chunk = chunk_list.head();
+  ChunkList* chunk_list_list = TlsAlloc();
+  for (size_t i = 0u; i < kIndexSizeMap.size() - 1; i++) {
+    auto chunk_list = &(chunk_list_list[i]);
+    if (chunk_list->head() != nullptr) {
+      auto chunk = chunk_list->head();
       while (chunk != nullptr) {
         ASSERT(true, chunk != nullptr);
         auto tmp = chunk;
@@ -298,21 +293,33 @@ inline void MemoryPool::ChunkBundle::Destroy() {
       }
     }
   }
+  delete[] chunk_list_list;
+  tls_.reset(NULL);
 }
 
 
 inline MemoryPool::ChunkBundle::ChunkList* MemoryPool::ChunkBundle::InitChunk(size_t size, size_t default_size, int index, Mmap* mmap) {
-  ChunkList* chunk_list = &bundles_[index];
-  size_t heap_size = index == 0? default_size: RASP_ALIGN_OFFSET(((size + (kPointerSize * 2)) * 50), kAlignment);
+  ChunkList* chunk_list = &(TlsAlloc()[index]);
+  size_t heap_size = index == 0? default_size: RASP_ALIGN_OFFSET(((kIndexSizeMap[index] + (kPointerSize * 2)) * 50), kAlignment);
   chunk_list->AllocChunkIfNecessary(size, heap_size, mmap);
   return chunk_list;
+}
+
+
+RASP_INLINE MemoryPool::ChunkBundle::ChunkList* MemoryPool::ChunkBundle::TlsAlloc() {
+  ChunkList* chunk_list_list = tls_.get();
+  if (chunk_list_list == NULL) {
+    chunk_list_list = new ChunkList[4];
+    tls_.reset(chunk_list_list);
+  }
+  return chunk_list_list;
 }
 
 
 RASP_INLINE void MemoryPool::ChunkBundle::AddToFreeList(MemoryPool::MemoryBlock* memory_block) RASP_NOEXCEPT {
   ASSERT(true, memory_block->IsMarkedAsDealloced());
   int index = FindBestFitBlockIndex(memory_block->size());
-  bundles_[index].AppendFreeList(memory_block);
+  TlsAlloc()[index].AppendFreeList(memory_block);
 }
 
 

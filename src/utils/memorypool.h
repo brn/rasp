@@ -33,7 +33,6 @@
 #include <new>
 #include <deque>
 #include <algorithm>
-#include <mutex>
 #include "utils.h"
 #include "../config.h"
 #include "mmap.h"
@@ -121,7 +120,7 @@ class MemoryPool : private Uncopyable {
   }
 
 
-  inline void* DistributeBlockWhileLocked(size_t size);
+  inline void* DistributeBlock(size_t size);
 
   
   class Chunk {
@@ -268,7 +267,13 @@ class MemoryPool : private Uncopyable {
 
     RASP_INLINE MemoryPool::ChunkBundle::ChunkList* InitChunk(size_t size, size_t default_size, int index, Mmap* mmap);
 
-    ChunkList bundles_[10];
+
+    RASP_INLINE MemoryPool::ChunkBundle::ChunkList* TlsAlloc();
+
+    static const std::array<int, 34> kSizeMap;
+    static const std::array<int, 5> kIndexSizeMap;
+    static const int kSmallMax = 3 KB;
+    static boost::thread_specific_ptr<ChunkList> tls_;
   };
   
 
@@ -284,9 +289,6 @@ class MemoryPool : private Uncopyable {
   std::atomic<bool> deleted_;
   
   Mmap allocator_;
-
-  std::mutex allocation_mutex_;
-  std::mutex deallocation_mutex_;
 
 #ifdef PLATFORM_64BIT
   typedef uint64_t SizeBit;

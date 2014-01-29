@@ -26,7 +26,7 @@
 #include <random>
 #include "../../src/utils/memorypool.h"
 
-static const uint64_t kSize = 10000000u;
+static const uint64_t kSize = 1000000u;
 
 
 class Test0 {
@@ -237,35 +237,35 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_big_object) {
 TEST(MemoryPoolTest, MemoryPoolTest_performance1) {
   rasp::MemoryPool p(1024);
   uint64_t ok = 0u;
-  for (uint64_t i = 0u; i < kSize / 10; i++) {
+  for (uint64_t i = 0u; i < kSize; i++) {
     new(&p) Test1(&ok);
   }
   p.Destroy();
-  ASSERT_EQ(kSize / 10, ok);
+  ASSERT_EQ(kSize, ok);
 }
 
 
 TEST(MemoryPoolTest, MemoryPoolTest_performance2) {
   uint64_t ok = 0u;
   {
-    std::vector<std::shared_ptr<Test0>> list(kSize / 10);
-    for (uint64_t i = 0u; i < kSize / 10; i++) {
+    std::vector<std::shared_ptr<Test0>> list(kSize);
+    for (uint64_t i = 0u; i < kSize; i++) {
       list[i] = std::make_shared<Test0>(&ok);
     }
   }
-  ASSERT_EQ(kSize / 10, ok);
+  ASSERT_EQ(kSize, ok);
 }
 
 
 TEST(MemoryPoolTest, MemoryPoolTest_performance3) {
   uint64_t ok = 0u;
-  std::vector<Test0*> list(kSize / 10);
-  for (uint64_t i = 0u; i < kSize / 10; i++) {
+  std::vector<Test0*> list(kSize);
+  for (uint64_t i = 0u; i < kSize; i++) {
     list[i] = new Test0(&ok);
   }
   for (auto c: list) {
     delete c;
   }
-  ASSERT_EQ(kSize / 10, ok);
+  ASSERT_EQ(kSize, ok);
 }
 
