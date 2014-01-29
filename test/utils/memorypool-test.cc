@@ -26,7 +26,7 @@
 #include <random>
 #include "../../src/utils/memorypool.h"
 
-static const int kSize = 10000000;
+static const uint64_t kSize = 10000000u;
 
 
 class Test0 {
@@ -101,16 +101,16 @@ class Array : public rasp::Poolable {
 TEST(MemoryPoolTest, MemoryPoolTest_allocate_from_chunk) {
   uint64_t ok = 0u;
   rasp::MemoryPool p(1024);
-  Test1* t = new(&p) Test1(&ok);
+  new(&p) Test1(&ok);
   p.Destroy();
-  ASSERT_EQ(ok, 1);
+  ASSERT_EQ(ok, 1u);
 }
 
 
 TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk) {
   rasp::MemoryPool p(1024);
   uint64_t ok = 0u;
-  for (int i = 0; i < kSize; i++) {
+  for (uint64_t i = 0u; i < kSize; i++) {
     new(&p) Test1(&ok);
   }
   p.Destroy();
@@ -153,7 +153,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_random) {
 	std::mt19937 mt(rd());
 	std::uniform_int_distribution<size_t> size(1, 100);
   rasp::MemoryPool p(1024);
-  for (int i = 0; i < kSize; i++) {
+  for (uint64_t i = 0u; i < kSize; i++) {
     int s = size(mt);
     int t = s % 3 == 0;
     int f = s % 5 == 0;
@@ -177,7 +177,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_and_dealloc2) {
 	std::uniform_int_distribution<size_t> size(1, 100);
   rasp::MemoryPool p(1024);
   void* last = nullptr;
-  for (int i = 0; i < kSize; i++) {
+  for (uint64_t i = 0u; i < kSize; i++) {
     int s = size(mt);
     int ss = s % 6 == 0;
     int t = s % 3 == 0;
@@ -205,7 +205,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_and_dealloc2) {
 TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_and_dealloc) {
   uint64_t ok = 0u;
   rasp::MemoryPool p(1024);
-  for (int i = 0; i < kSize; i++) {
+  for (uint64_t i = 0u; i < kSize; i++) {
     Test1* t = new(&p) Test1(&ok);
     p.Dealloc(t);
   }
@@ -217,16 +217,16 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_and_dealloc) {
 TEST(MemoryPoolTest, MemoryPoolTest_allocate_big_object) {
   uint64_t ok = 0u;
   rasp::MemoryPool p(8);
-  LargeObject* t = new(&p) LargeObject(&ok);
+  new(&p) LargeObject(&ok);
   p.Destroy();
-  ASSERT_EQ(ok, 1);
+  ASSERT_EQ(ok, 1u);
 }
 
 
 TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_big_object) {
   uint64_t ok = 0u;
   rasp::MemoryPool p(8);
-  for (int i = 0; i < kSize; i++) {
+  for (uint64_t i = 0u; i < kSize; i++) {
     new(&p) LargeObject(&ok);
   }
   p.Destroy();
@@ -237,8 +237,8 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_big_object) {
 TEST(MemoryPoolTest, MemoryPoolTest_performance1) {
   rasp::MemoryPool p(1024);
   uint64_t ok = 0u;
-  for (int i = 0; i < kSize / 10; i++) {
-    Test1* t = new(&p) Test1(&ok);
+  for (uint64_t i = 0u; i < kSize / 10; i++) {
+    new(&p) Test1(&ok);
   }
   p.Destroy();
   ASSERT_EQ(kSize / 10, ok);
@@ -247,8 +247,11 @@ TEST(MemoryPoolTest, MemoryPoolTest_performance1) {
 
 TEST(MemoryPoolTest, MemoryPoolTest_performance2) {
   uint64_t ok = 0u;
-  for (int i = 0; i < kSize / 10; i++) {
-    std::shared_ptr<Test1> t = std::make_shared<Test1>(&ok);
+  {
+    std::vector<std::shared_ptr<Test0>> list(kSize / 10);
+    for (uint64_t i = 0u; i < kSize / 10; i++) {
+      list[i] = std::make_shared<Test0>(&ok);
+    }
   }
   ASSERT_EQ(kSize / 10, ok);
 }
@@ -257,7 +260,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_performance2) {
 TEST(MemoryPoolTest, MemoryPoolTest_performance3) {
   uint64_t ok = 0u;
   std::vector<Test0*> list(kSize / 10);
-  for (int i = 0; i < kSize / 10; i++) {
+  for (uint64_t i = 0u; i < kSize / 10; i++) {
     list[i] = new Test0(&ok);
   }
   for (auto c: list) {

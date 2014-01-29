@@ -266,7 +266,7 @@ class MemoryPool : private Uncopyable {
     };
 
 
-    RASP_INLINE MemoryPool::ChunkList* InitChunk(size_t size, size_t default_size, int index, Mmap* mmap);
+    RASP_INLINE MemoryPool::ChunkBundle::ChunkList* InitChunk(size_t size, size_t default_size, int index, Mmap* mmap);
 
     ChunkList bundles_[10];
   };

@@ -79,7 +79,7 @@ class Mmap::InternalMmap {
   
   
   RASP_INLINE void* Commit(size_t size) {
-    size_t needs = RASP_ALIGN_OFFSET((kPointerSize + size), kAlignment);
+    size_t needs = RASP_ALIGN_OFFSET((kPointerSize + size), 4 KB);
     if (current_map_size_ < needs || (current_map_size_ - used_) < needs || heap_ == nullptr) {
       return Alloc(needs);
     }

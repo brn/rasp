@@ -54,47 +54,52 @@ namespace rasp {
 
 #define RASP_NO_SE const RASP_NOEXCEPT
 
+#ifndef __PRETTY_FUNCTION__
+#ifndef __func__
+#define __PRETTY_FUNCTION__ __func__
+#elif defined(__FUNCTION__)
+#define __PRETTY_FUNCTION__ __FUNCTION__
+#else
+#define __PRETTY_FUNCTION__ "anonymous"
+#endif
+#endif
+
+
+RASP_INLINE void Assert__(bool ok, const char* result, const char* expect, const char* file, int line, const char* function, const std::string& message) {
+  if (!ok) {
+    FPrintf(stderr, "assertion failed -> %s == %s\n in file %s at line %d\nIn function %s\n%s\n",
+            result, expect, file, line, function, message.c_str());
+    abort();
+  }
+}
+
+
+RASP_INLINE void Fatal__(const char* file, int line, const char* function, const std::string& message) {
+  FPrintf(stderr, "Fatal error occured, so process no longer exist.\nin file %s at line %d\n%s\n",
+          file, line, function, message.c_str());
+  abort();
+}
+
 
 // ASSERT macro definition.
-#if defined __GNUC__
-
-#if defined DEBUG
-#define ASSERT(expect, result)                                          \
-  if ((expect) != (result)) {FPrintf(stderr, "assertion failed -> %s == %s\n in file %s at line %d\n in function %s\n", #result, #expect, __FILE__, __LINE__, __PRETTY_FUNCTION__);abort();}
-#endif
-
-#define FATAL(msg) {std::stringstream err_stream__;err_stream__ << msg;;FPrintf(stderr, "Fatal error occured, so process no longer exist.\nin file %s at line %d\n in function %s\n%s\n", __FILE__, __LINE__, __PRETTY_FUNCTION__, err_stream__.str().c_str());abort();}
-
-#elif defined __func__
-
-#if defined DEBUG
-#define ASSERT(expect, result) if ((expect) != (result)){FPrintf(stderr, "assertion failed -> %s == %s\n in file %s at line %d\n in function %s\n", #result, #expect, __FILE__, __LINE__, __func__);abort();}
-#endif
-
-#define FATAL(msg) {std::stringstream err_stream__;err_stream__ << msg;FPrintf(stderr, "Fatal error occured, so process no longer exist.\nin file %s at line %d\n in function %s\n%s\n", __FILE__, __LINE__, __func__, err_stream__.str().c_str());abort();}
-
-#elif defined __FUNC__
-
-#if defined DEBUG
-#define ASSERT(expect, result) if ((expect) != (result)){FPrintf(stderr, "assertion failed -> %s == %s\n in file %s at line %d\n in function \n", #result, #expect, __FILE__, __LINE__, __FUNC__);abort();}
-#endif
-
-#define FATAL(msg) {std::stringstream err_stream__;err_stream__ << msg;FPrintf(stderr, "Fatal error occured, so process no longer exist.\nin file %s at line %d\n in function %s\n%s\n", __FILE__, __LINE__, __FUNC__, err_stream__.str().c_str());abort();}
-
-#else
-
-#if defined DEBUG
-#define ASSERT(expect, result) if ((expect) != (result)){FPrintf(stderr, "assertion failed -> %s == %s\n in file %s at line %d\n", #result, #expect, __FILE__, __LINE__);abort();}
-#endif
-
-#define FATAL(msg) {std::stringstream err_stream__;err_stream__ << msg;FPrintf(stderr, "Fatal error occured, so process no longer exist.\nin file %s at line %d\n%s\n", __FILE__, __LINE__, err_stream__.str().c_str());abort();}
-
-#endif
-
-#if defined(NDEBUG) || !defined(DEBUG)
+#ifdef DEBUG
+#define ASSERT(expect, result) Assert__(result == expect, #result, #expect, __FILE__, __LINE__, __PRETTY_FUNCTION__, "")
+#define ASSERT_MESSAGE(expect, result, message) Assert__(result == expect, #result, #expect, __FILE__, __LINE__, __PRETTY_FUNCTION__, std::string(message))
+#elif defined(NDEBUG) || !defined(DEBUG)
 #define ASSERT(expect, result)
+#define ASSERT_MESSAGE(expect, result, message)
 #endif
+
+
+#define ND_ASSERT(expect, result) Assert__(result == expect, #result, #expect, __FILE__, __LINE__, __PRETTY_FUNCTION__, "")
+#define ND_ASSERT_MESSAGE(expect, result, message) Assert__(result == expect, #result, #expect, __FILE__, __LINE__, __PRETTY_FUNCTION__, std::string(message))
+
 // ASSERT macro definition end.
+
+
+#define FATAL(msg) {std::stringstream err_stream__;err_stream__ << msg;Fatal__(__FILE__, __LINE__, __PRETTY_FUNCTION__, err_stream__.str());}
+
+
 
 
 typedef uint8_t Byte;
@@ -117,6 +122,10 @@ static const size_t kPointerSize = kAlignment;
 #elif defined(HaVE___ALIGNOF)
 #define RASP_ALIGN(offset, type)  RASP_ALIGN_OFFSET(offset, __alignof(type))
 #endif
+
+#define KB * 1024
+#define MB KB * 1024
+#define GB MB * 1024
 
 
 /**

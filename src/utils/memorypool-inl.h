@@ -75,19 +75,19 @@ struct MemoryPool::MemoryBlock {
 
 
   RASP_INLINE void MarkAsDealloced() RASP_NOEXCEPT {
-    Pointer p = reinterpret_cast<Pointer>(ToBegin() + kValueOffset);
-    p |= kDeallocedBit;
+    Byte* p = reinterpret_cast<Byte*>(ToBegin() + kValueOffset);
+    *p |= kDeallocedBit;
   }
 
 
   RASP_INLINE void UnmarkDealloced() RASP_NOEXCEPT {
-    Pointer p = reinterpret_cast<Pointer>(ToBegin() + kValueOffset);
-    p &= kDeallocedMask;
+    Byte* p = reinterpret_cast<Byte*>(ToBegin() + kValueOffset);
+    *p &= kDeallocedMask;
   }
 
 
   RASP_INLINE bool IsMarkedAsDealloced() RASP_NOEXCEPT {
-    return (reinterpret_cast<Pointer>(ToBegin() + kValueOffset) & kDeallocedBit) == kDeallocedBit;
+    return (*reinterpret_cast<Byte*>(ToBegin() + kValueOffset) & kDeallocedBit) == kDeallocedBit;
   }
 
 
@@ -217,24 +217,23 @@ RASP_INLINE void* MemoryPool::Allocate(size_t size) {
 
 
 inline void MemoryPool::Dealloc(void* object) {
-  std::lock_guard<std::mutex> lock(deallocation_mutex_);
+  //std::lock_guard<std::mutex> lock(deallocation_mutex_);
   
   Byte* block = reinterpret_cast<Byte*>(object);
   block -= MemoryPool::kValueOffset;
   MemoryPool::MemoryBlock* memory_block = reinterpret_cast<MemoryPool::MemoryBlock*>(block);
+
+  ND_ASSERT(true, !memory_block->IsMarkedAsDealloced());
   
-  if (!memory_block->IsMarkedAsDealloced()) {
-    memory_block->ToValue()->~Poolable();
-    memory_block->MarkAsDealloced();
-    chunk_bundle_->AddToFreeList(memory_block);
-  }
+  memory_block->ToValue()->~Poolable();
+  memory_block->MarkAsDealloced();
+  chunk_bundle_->AddToFreeList(memory_block);
 }
 
 
 inline void* MemoryPool::DistributeBlockWhileLocked(size_t size) {
-  std::lock_guard<std::mutex> lock(allocation_mutex_);
+  //std::lock_guard<std::mutex> lock(allocation_mutex_);
   
-  size_t aligned_size = RASP_ALIGN_OFFSET(size, kAlignment);  
   const size_t kPoolableSize = sizeof(Poolable);
   MemoryBlock* block = chunk_bundle_->Commit(size, size_, &allocator_);
     
@@ -277,11 +276,8 @@ RASP_INLINE MemoryPool::MemoryBlock* MemoryPool::ChunkBundle::ChunkList::SwapFre
 
 inline int MemoryPool::ChunkBundle::FindBestFitBlockIndex(size_t size) {
   int index;
-  if (size < kAlignment) {
-    return 0;
-  }
-  
-  index = size / kAlignment;
+  ND_ASSERT(true, size > kAlignment);
+  index = (size / kAlignment);
   if (index > 9) {
     return 0;
   }
@@ -307,12 +303,14 @@ inline void MemoryPool::ChunkBundle::Destroy() {
 
 inline MemoryPool::ChunkBundle::ChunkList* MemoryPool::ChunkBundle::InitChunk(size_t size, size_t default_size, int index, Mmap* mmap) {
   ChunkList* chunk_list = &bundles_[index];
-  chunk_list->AllocChunkIfNecessary(size, default_size, mmap);
+  size_t heap_size = index == 0? default_size: RASP_ALIGN_OFFSET(((size + (kPointerSize * 2)) * 50), kAlignment);
+  chunk_list->AllocChunkIfNecessary(size, heap_size, mmap);
   return chunk_list;
 }
 
 
 RASP_INLINE void MemoryPool::ChunkBundle::AddToFreeList(MemoryPool::MemoryBlock* memory_block) RASP_NOEXCEPT {
+  ASSERT(true, memory_block->IsMarkedAsDealloced());
   int index = FindBestFitBlockIndex(memory_block->size());
   bundles_[index].AppendFreeList(memory_block);
 }
