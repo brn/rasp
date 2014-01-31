@@ -111,6 +111,7 @@ typedef uint32_t Pointer;
 
 static const size_t kAlignment = sizeof(void*);
 static const size_t kPointerSize = kAlignment;
+static const size_t kSizeTSize = sizeof(size_t);
 
 
 #define RASP_ALIGN_OFFSET(offset, alignment)           \

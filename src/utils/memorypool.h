@@ -205,12 +205,19 @@ class MemoryPool : private Uncopyable {
   };
 
 
+  class ChunkList;
+  class Arena;
+  
+
   class ChunkBundle {
    public:
-    ChunkBundle() {}
+    ChunkBundle(Mmap* mmap)
+        : arena_head_(nullptr),
+          arena_tail_(nullptr),
+          mmap_(mmap) {}
 
     
-    inline MemoryPool::MemoryBlock* Commit(size_t size, size_t default_size, Mmap* mmap);
+    inline MemoryPool::MemoryBlock* Commit(size_t size, size_t default_size);
 
     
     inline void Destroy();
@@ -221,59 +228,103 @@ class MemoryPool : private Uncopyable {
    private:
     
     inline int FindBestFitBlockIndex(size_t size);
+
+
+    inline Arena* FindUnlockedArena();
     
+
+    RASP_INLINE MemoryPool::ChunkList* InitChunk(size_t size, size_t default_size, int index);
+
+
+    RASP_INLINE MemoryPool::Arena* TlsAlloc();
+
+    std::atomic<Arena*> arena_head_;
+    std::atomic<Arena*> arena_tail_;
+
+    Mmap* mmap_;
     
-    class ChunkList {
-     public:
-      ChunkList()
-          : head_(nullptr),
-            current_(nullptr),
-            free_head_(nullptr),
-            current_free_(nullptr) {}
-
-      RASP_INLINE MemoryPool::Chunk* head() RASP_NO_SE {return head_;}
-      RASP_INLINE MemoryPool::Chunk* current() RASP_NO_SE {return current_;}
-
-      RASP_INLINE MemoryPool::MemoryBlock* free_head() RASP_NO_SE {return free_head_;}
-      RASP_INLINE MemoryPool::MemoryBlock* current_free() RASP_NO_SE {return current_free_;}
-
-
-      inline void AppendFreeList(MemoryPool::MemoryBlock* block) RASP_NOEXCEPT;
-      
-
-      inline MemoryPool::MemoryBlock* FindApproximateDeallocedBlock(size_t size) RASP_NOEXCEPT;
-
-
-      inline void AllocChunkIfNecessary(size_t size, size_t default_size, Mmap* mmap);
-
-
-      /**
-       * Remove MemoryBlock from the free list.
-       * @param find The pointer which is realloced.
-       * @param last The pointer which is the prev pointer of the find.
-       */
-      inline void EraseFromDeallocedList(MemoryPool::MemoryBlock* find, MemoryPool::MemoryBlock* last) RASP_NOEXCEPT;
-
-
-      RASP_INLINE MemoryPool::MemoryBlock* SwapFreeHead() RASP_NOEXCEPT;
-      
-     private:
-      MemoryPool::Chunk* head_;
-      MemoryPool::Chunk* current_;
-      MemoryPool::MemoryBlock* free_head_;
-      MemoryPool::MemoryBlock* current_free_;
-    };
-
-
-    RASP_INLINE MemoryPool::ChunkBundle::ChunkList* InitChunk(size_t size, size_t default_size, int index, Mmap* mmap);
-
-
-    RASP_INLINE MemoryPool::ChunkBundle::ChunkList* TlsAlloc();
-
     static const std::array<int, 34> kSizeMap;
     static const std::array<int, 5> kIndexSizeMap;
     static const int kSmallMax = 3 KB;
-    static boost::thread_specific_ptr<ChunkList> tls_;
+    static boost::thread_specific_ptr<Arena> tls_;
+  };
+
+
+  class ChunkList {
+   public:
+    ChunkList()
+        : head_(nullptr),
+          current_(nullptr),
+          free_head_(nullptr),
+          current_free_(nullptr) {}
+
+    RASP_INLINE MemoryPool::Chunk* head() RASP_NO_SE {return head_;}
+    RASP_INLINE MemoryPool::Chunk* current() RASP_NO_SE {return current_;}
+
+    RASP_INLINE MemoryPool::MemoryBlock* free_head() RASP_NO_SE {return free_head_;}
+    RASP_INLINE MemoryPool::MemoryBlock* current_free() RASP_NO_SE {return current_free_;}
+
+
+    inline void AppendFreeList(MemoryPool::MemoryBlock* block) RASP_NOEXCEPT;
+      
+
+    inline MemoryPool::MemoryBlock* FindApproximateDeallocedBlock(size_t size) RASP_NOEXCEPT;
+
+
+    inline void AllocChunkIfNecessary(size_t size, size_t default_size, Mmap* mmap);
+
+
+    /**
+     * Remove MemoryBlock from the free list.
+     * @param find The pointer which is realloced.
+     * @param last The pointer which is the prev pointer of the find.
+     */
+    inline void EraseFromDeallocedList(MemoryPool::MemoryBlock* find, MemoryPool::MemoryBlock* last) RASP_NOEXCEPT;
+
+
+    RASP_INLINE MemoryPool::MemoryBlock* SwapFreeHead() RASP_NOEXCEPT;
+      
+   private:
+    MemoryPool::Chunk* head_;
+    MemoryPool::Chunk* current_;
+    MemoryPool::MemoryBlock* free_head_;
+    MemoryPool::MemoryBlock* current_free_;
+  };
+
+
+  class Arena {
+   public:
+    inline Arena(Mmap* mmap);
+    inline ~Arena();
+    
+    inline Arena* next() RASP_NO_SE {
+      return next_;
+    }
+
+
+    inline void set_next(Arena* chunk_list) RASP_NOEXCEPT {
+      next_ = chunk_list;
+    }
+
+
+    inline bool AcquireLock() RASP_NOEXCEPT {
+      return lock_.test_and_set();
+    }
+
+
+    inline void ReleaseLock() RASP_NOEXCEPT {
+      lock_.clear();
+    }
+
+
+    inline ChunkList* chunk_list(int index) {
+      return classed_chunk_list_ + index;
+    }
+   private:
+    std::atomic_flag lock_;
+    Mmap* mmap_;
+    ChunkList* classed_chunk_list_;
+    Arena* next_;
   };
   
 

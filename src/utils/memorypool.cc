@@ -64,7 +64,6 @@ void MemoryPool::Destroy() RASP_NOEXCEPT {
   if (!deleted_.load()) {
     deleted_.store(true);
     chunk_bundle_->Destroy();
-    delete chunk_bundle_;
   }
 }
 
@@ -81,7 +80,7 @@ const std::array<int, 5> MemoryPool::ChunkBundle::kIndexSizeMap = {{
     0, 8, 16, 32
   }};
 
-boost::thread_specific_ptr<MemoryPool::ChunkBundle::ChunkList> MemoryPool::ChunkBundle::tls_;
+boost::thread_specific_ptr<MemoryPool::Arena> MemoryPool::ChunkBundle::tls_;
 
 } //namespace rasp
 
