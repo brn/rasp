@@ -28,12 +28,14 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <boost/thread.hpp>
+#include <iostream>
+#include <unordered_map>
 #include <atomic>
 #include <new>
 #include <deque>
 #include <algorithm>
 #include "utils.h"
+#include "tls.h"
 #include "../config.h"
 #include "mmap.h"
 
@@ -88,12 +90,6 @@ class MemoryPool : private Uncopyable {
    * Free all allocated memory.
    */
   void Destroy() RASP_NOEXCEPT;
-  
-  
-  /**
-   * allocate to tls space.
-   */
-  inline static MemoryPool* local_instance(size_t size);
   
 
   /**
@@ -205,51 +201,6 @@ class MemoryPool : private Uncopyable {
   };
 
 
-  class ChunkList;
-  class Arena;
-  
-
-  class ChunkBundle {
-   public:
-    ChunkBundle(Mmap* mmap)
-        : arena_head_(nullptr),
-          arena_tail_(nullptr),
-          mmap_(mmap) {}
-
-    
-    inline MemoryPool::MemoryBlock* Commit(size_t size, size_t default_size);
-
-    
-    inline void Destroy();
-
-
-    RASP_INLINE void AddToFreeList(MemoryPool::MemoryBlock* memory_block) RASP_NOEXCEPT;
-    
-   private:
-    
-    inline int FindBestFitBlockIndex(size_t size);
-
-
-    inline Arena* FindUnlockedArena();
-    
-
-    RASP_INLINE MemoryPool::ChunkList* InitChunk(size_t size, size_t default_size, int index);
-
-
-    RASP_INLINE MemoryPool::Arena* TlsAlloc();
-
-    std::atomic<Arena*> arena_head_;
-    std::atomic<Arena*> arena_tail_;
-
-    Mmap* mmap_;
-    
-    static const std::array<int, 34> kSizeMap;
-    static const std::array<int, 5> kIndexSizeMap;
-    static const int kSmallMax = 3 KB;
-    static boost::thread_specific_ptr<Arena> tls_;
-  };
-
-
   class ChunkList {
    public:
     ChunkList()
@@ -292,23 +243,106 @@ class MemoryPool : private Uncopyable {
   };
 
 
-  class Arena {
+  class LocalArena;
+  
+
+  class CentralArena {
+    typedef double TlsKey;
+    typedef std::unordered_map<TlsKey, MemoryPool::LocalArena*> ThreadLocalArenaPtr;
    public:
-    inline Arena(Mmap* mmap);
-    inline ~Arena();
+    CentralArena(Mmap* mmap)
+        : arena_head_(nullptr),
+          arena_tail_(nullptr),
+          mmap_(mmap) {
+      tls_ = new(mmap_->Commit(sizeof(Tls<MemoryPool::LocalArena*>))) Tls<MemoryPool::LocalArena*>(&TlsFree);
+      searching_ = 0;
+    }
+
     
-    inline Arena* next() RASP_NO_SE {
+    inline MemoryPool::MemoryBlock* Commit(size_t size, size_t default_size);
+
+    
+    inline void Destroy();
+
+
+    RASP_INLINE void AddToFreeList(MemoryPool::MemoryBlock* memory_block) RASP_NOEXCEPT;
+
+
+    inline void FreeArena(MemoryPool::LocalArena* arena);
+    
+   private:
+    
+    inline int FindBestFitBlockIndex(size_t size);
+
+
+    inline LocalArena* FindUnlockedArena();
+    
+
+    RASP_INLINE MemoryPool::ChunkList* InitChunk(size_t size, size_t default_size, int index);
+
+
+    RASP_INLINE MemoryPool::LocalArena* TlsAlloc();
+
+
+    static RASP_INLINE TlsKey GetTlsKey() RASP_NOEXCEPT {
+      return std::hash<std::thread::id>()(std::this_thread::get_id());
+    }
+    
+
+    inline void AppendArena(MemoryPool::LocalArena* arena);
+
+    
+    inline void WaitWhileTreeStateIsMutable() {
+      int not_searching = 0;
+      while(!searching_.compare_exchange_weak(not_searching, -1)) {
+        not_searching = 0;
+      }
+    }
+
+
+    inline void WaitWhileTreeStateIsImmutable() {
+      while(searching_ == -1){}
+    }
+
+
+    inline void NotifyTreeStateMutable() {
+      searching_.store(0, std::memory_order_release);
+    }
+    
+
+    LocalArena* arena_head_;
+    LocalArena* arena_tail_;
+    std::atomic_int searching_;
+
+    Mmap* mmap_;
+    SpinLock lock_;
+    Tls<MemoryPool::LocalArena*>* tls_;
+    
+    static const int kSmallMax = 3 KB;
+
+    static inline void TlsFree(LocalArena* arena) {
+      arena->Return();
+    }
+  };
+
+
+  class LocalArena {
+   public:
+    inline LocalArena(CentralArena* central_arena, Mmap* mmap);
+    inline ~LocalArena();
+    
+    inline LocalArena* next() RASP_NO_SE {
       return next_;
     }
 
 
-    inline void set_next(Arena* chunk_list) RASP_NOEXCEPT {
+    inline void set_next(LocalArena* chunk_list) RASP_NOEXCEPT {
       next_ = chunk_list;
     }
 
 
     inline bool AcquireLock() RASP_NOEXCEPT {
-      return lock_.test_and_set();
+      return !lock_.test_and_set();
     }
 
 
@@ -320,16 +354,20 @@ class MemoryPool : private Uncopyable {
     inline ChunkList* chunk_list(int index) {
       return classed_chunk_list_ + index;
     }
+
+
+    inline void Return();
    private:
+    CentralArena* central_arena_;
     std::atomic_flag lock_;
     Mmap* mmap_;
     ChunkList* classed_chunk_list_;
-    Arena* next_;
+    LocalArena* next_;
   };
   
 
   // The chunk list.
-  ChunkBundle* chunk_bundle_;
+  CentralArena* central_arena_;
 
 
   MemoryBlock* dealloced_head_;
@@ -337,7 +375,7 @@ class MemoryPool : private Uncopyable {
   
 
   size_t size_;
-  std::atomic<bool> deleted_;
+  std::atomic_flag deleted_;
   
   Mmap allocator_;
 
@@ -359,6 +397,7 @@ class MemoryPool : private Uncopyable {
   static const uint8_t kDeallocedBit = 0x2;
   static const uint32_t kInvalidPointer = 0xDEADC0DE;
   static const size_t kValueOffset = kSizeBitSize + kPointerSize;
+  static const int kMaxSmallObjectsCount = 30;
 };
 
 } // namesapce rasp

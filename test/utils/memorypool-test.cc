@@ -24,6 +24,7 @@
 
 #include <gtest/gtest.h>
 #include <random>
+#include <thread>
 #include "../../src/utils/memorypool.h"
 
 static const uint64_t kSize = 1000000u;
@@ -98,6 +99,7 @@ class Array : public rasp::Poolable {
   ~Array() {(*ok) = true;}
 };
 
+/*
 TEST(MemoryPoolTest, MemoryPoolTest_allocate_from_chunk) {
   uint64_t ok = 0u;
   rasp::MemoryPool p(1024);
@@ -116,35 +118,6 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk) {
   p.Destroy();
   ASSERT_EQ(kSize, ok);
 }
-
-/*
-TEST(MemoryPoolTest, MemoryPoolTest_allocate_random_many_from_chunk) {
-  std::random_device rd;
-	std::mt19937 mt(rd());
-	std::uniform_int_distribution<size_t> size(1, 100);
-  static const int kSize = 10000000;
-  std::vector<int> size_list;
-  std::vector<bool*> ok_list;
-  rasp::MemoryPool p(1024);
-  for (int i = 0; i < kSize; i++) {
-    int s = size(mt);
-    Array* arr = p.AllocateArray<Array>(s);
-    ok_list.push_back(new bool[s]);
-    size_list.push_back(s);
-    for (int j = 0; j < s; j++) {
-      arr[j].ok = &(ok_list.at(i)[j]);
-    }
-  }
-
-  p.Destroy();
-  for (int i = 0, len = kSize; i < len; i++) {
-    int size = size_list.at(i);
-    for (int j = 0; j < size; j++) {
-      ASSERT_TRUE(ok_list.at(i)[j]);
-    }
-    delete ok_list[i];
-  }
-  }*/
 
 
 TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_random) {
@@ -267,5 +240,37 @@ TEST(MemoryPoolTest, MemoryPoolTest_performance3) {
     delete c;
   }
   ASSERT_EQ(kSize, ok);
+}*/
+
+
+TEST(MemoryPoolTest, MemoryPoolTest_thread) {
+  static const int kSize = 100000;
+  static const int kThreadSize = 6;
+  uint64_t ok = 0u;
+  rasp::MemoryPool p(1024);
+  int index = 0;
+  auto fn = [&]() {
+    for (uint64_t i = 0u; i < kSize; i++) {
+      new(&p) Test1(&ok);
+    }
+    index++;
+  };
+  
+  std::vector<std::thread*> threads;
+  for (int i = 0; i < kThreadSize; i++) {
+    auto th = new std::thread(fn);
+    threads.push_back(th);
+  }
+  for (int i = 0; i < kThreadSize; i++) {
+    //if (threads[i]->joinable()) {
+      threads[i]->detach();
+      //}
+    delete threads[i];
+  }
+
+  while(index != kThreadSize) {}
+  
+  p.Destroy();
+  ASSERT_EQ(kSize * kThreadSize, ok);
 }
 

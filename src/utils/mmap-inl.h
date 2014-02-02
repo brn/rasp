@@ -26,7 +26,9 @@
 #ifndef UTILS_MMAP_INL_H_
 #define UTILS_MMAP_INL_H_
 
+#include <thread>
 #include "./utils.h"
+#include "spinlock.h"
 #include "../config.h"
 
 
@@ -72,13 +74,16 @@ class Mmap::InternalMmap {
       used_(0u),
       heap_(nullptr),
       current_(nullptr),
-      last_(nullptr) {}
+      last_(nullptr) {
+    lock_.clear();
+  }
 
 
   ~InternalMmap() = default;
   
   
   RASP_INLINE void* Commit(size_t size) {
+    ScopedSpinLock lock(spin_lock_);
     size_t needs = RASP_ALIGN_OFFSET((kPointerSize + size), 4 KB);
     if (current_map_size_ < needs || (current_map_size_ - used_) < needs || heap_ == nullptr) {
       return Alloc(needs);
@@ -130,6 +135,8 @@ class Mmap::InternalMmap {
   }
   
 
+  SpinLock spin_lock_;
+  std::atomic_flag lock_;
   size_t current_map_size_;
   size_t used_;
   void* heap_;
@@ -144,16 +151,16 @@ RASP_INLINE void* Mmap::Commit(size_t size) {
 
 
 RASP_INLINE void Mmap::UnCommit() {
-  if (!uncommited_.load()) {
-    uncommited_.store(true);
+  if (!uncommited_.test_and_set()) {
     mmap_->UnCommit();
   }
 }
 
 
 Mmap::Mmap()
-    : mmap_(new InternalMmap()),
-      uncommited_(false) {}
+    : mmap_(new InternalMmap()) {
+  uncommited_.clear();
+}
 
 Mmap::~Mmap() {
   UnCommit();

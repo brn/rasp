@@ -47,13 +47,13 @@ void MemoryPool::Chunk::Destruct() {
 
 
 MemoryPool& MemoryPool::operator = (MemoryPool&& memory_pool) {
-  chunk_bundle_ = memory_pool.chunk_bundle_;
+  central_arena_ = memory_pool.central_arena_;
   dealloced_head_ = memory_pool.dealloced_head_;
   current_dealloced_ = memory_pool.current_dealloced_;
   size_ = memory_pool.size_;
-  deleted_ = false;
-  memory_pool.deleted_ = true;
-  memory_pool.chunk_bundle_ = nullptr;
+  deleted_.clear();
+  memory_pool.deleted_.test_and_set();
+  memory_pool.central_arena_ = nullptr;
   memory_pool.dealloced_head_ = nullptr;
   memory_pool.current_dealloced_ = nullptr;
   return (*this);
@@ -61,26 +61,10 @@ MemoryPool& MemoryPool::operator = (MemoryPool&& memory_pool) {
 
 
 void MemoryPool::Destroy() RASP_NOEXCEPT {
-  if (!deleted_.load()) {
-    deleted_.store(true);
-    chunk_bundle_->Destroy();
+  if (!deleted_.test_and_set()) {
+    central_arena_->Destroy();
   }
 }
-
-
-const std::array<int, 34> MemoryPool::ChunkBundle::kSizeMap = {{
-    0, 1, 1, 1, 1, 1, 1, 1, 1,
-    2, 2, 2, 2, 2, 2, 2, 2,
-    3, 3, 3, 3, 3, 3, 3, 3,
-    3, 3, 3, 3, 3, 3, 3, 3,
-  }};
-
-
-const std::array<int, 5> MemoryPool::ChunkBundle::kIndexSizeMap = {{
-    0, 8, 16, 32
-  }};
-
-boost::thread_specific_ptr<MemoryPool::Arena> MemoryPool::ChunkBundle::tls_;
 
 } //namespace rasp
 

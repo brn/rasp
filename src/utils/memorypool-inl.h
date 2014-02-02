@@ -29,6 +29,7 @@
 
 #include <stdlib.h>
 #include <type_traits>
+#include <thread>
 
 
 namespace rasp {
@@ -110,7 +111,45 @@ inline void* Poolable::operator new[](size_t size, MemoryPool* pool) {
 inline void Poolable::operator delete(void* object, MemoryPool* pool) {}
 
 
-static boost::thread_specific_ptr<MemoryPool> tls_;
+//MemoryPool constructor.
+inline MemoryPool::MemoryPool(size_t size)
+    : dealloced_head_(nullptr),
+      current_dealloced_(nullptr),
+      size_(size) {
+  ASSERT(true, size <= kMaxAllocatableSize);
+  central_arena_ = new(allocator_.Commit(sizeof(CentralArena))) CentralArena(&allocator_);
+  deleted_.clear();
+}
+
+
+inline void MemoryPool::Dealloc(void* object) {  
+  Byte* block = reinterpret_cast<Byte*>(object);
+  block -= MemoryPool::kValueOffset;
+  MemoryPool::MemoryBlock* memory_block = reinterpret_cast<MemoryPool::MemoryBlock*>(block);
+
+  ND_ASSERT(true, !memory_block->IsMarkedAsDealloced());
+  
+  memory_block->ToValue()->~Poolable();
+  memory_block->MarkAsDealloced();
+  central_arena_->AddToFreeList(memory_block);
+}
+
+
+RASP_INLINE void* MemoryPool::Allocate(size_t size) {
+  return DistributeBlock(size);
+}
+
+
+inline void* MemoryPool::DistributeBlock(size_t size) {
+  const size_t kPoolableSize = sizeof(Poolable);
+  MemoryBlock* block = central_arena_->Commit(size, size_);
+    
+  if (kPoolableSize > size) {
+    size = kPoolableSize;
+  }
+  
+  return block->ToValue<void>();
+}
 
 
 // Create Chunk from byte block.
@@ -189,177 +228,19 @@ inline rasp::MemoryPool::MemoryBlock* MemoryPool::Chunk::GetBlock(size_t reserve
   memory_block->set_next_ptr(nullptr);
   return memory_block;
 }
+// Chunk inline end
 
 
-//MemoryPool constructor.
-inline MemoryPool::MemoryPool(size_t size)
-    : dealloced_head_(nullptr),
-      current_dealloced_(nullptr),
-      size_(size),
-      deleted_(false) {
-  ASSERT(true, size <= kMaxAllocatableSize);
-  chunk_bundle_ = new(allocator_.Commit(sizeof(ChunkBundle))) ChunkBundle(&allocator_);
-}
-
-
-
-inline MemoryPool* MemoryPool::local_instance(size_t size) {
-  if (tls_.get() == NULL) {
-    tls_.reset(new MemoryPool(size));
-  }
-  return tls_.get();
-}
-
-
-RASP_INLINE void* MemoryPool::Allocate(size_t size) {
-  return DistributeBlock(size);
-}
-
-
-inline void MemoryPool::Dealloc(void* object) {  
-  Byte* block = reinterpret_cast<Byte*>(object);
-  block -= MemoryPool::kValueOffset;
-  MemoryPool::MemoryBlock* memory_block = reinterpret_cast<MemoryPool::MemoryBlock*>(block);
-
-  ND_ASSERT(true, !memory_block->IsMarkedAsDealloced());
-  
-  memory_block->ToValue()->~Poolable();
-  memory_block->MarkAsDealloced();
-  chunk_bundle_->AddToFreeList(memory_block);
-}
-
-
-inline void* MemoryPool::DistributeBlock(size_t size) {
-  const size_t kPoolableSize = sizeof(Poolable);
-  MemoryBlock* block = chunk_bundle_->Commit(size, size_);
-    
-  if (kPoolableSize > size) {
-    size = kPoolableSize;
-  }
-  
-  return block->ToValue<void>();
-}
-
-
-
-inline MemoryPool::MemoryBlock* MemoryPool::ChunkBundle::Commit(size_t size, size_t default_size) {
-  ASSERT(true, size > 0);
-  int index = FindBestFitBlockIndex(size);
-  ChunkList* chunk_list = InitChunk(size, default_size, index);
-
-  if (chunk_list->free_head() != nullptr) {
-    if (index != 0) {
-      return chunk_list->SwapFreeHead();
-    }
-    
-    MemoryBlock* block = chunk_list->FindApproximateDeallocedBlock(size);
-    if (block != nullptr) {
-      return block;
-    }
-  }
-  
-  return chunk_list->current()->GetBlock(size);
-}
-
-
-RASP_INLINE MemoryPool::MemoryBlock* MemoryPool::ChunkList::SwapFreeHead() RASP_NOEXCEPT {
-  MemoryBlock* block = free_head_;
-  free_head_ = block->ToNextPtr();
-  return block;
-}
-
-
-
-inline int MemoryPool::ChunkBundle::FindBestFitBlockIndex(size_t size) {
-  ND_ASSERT(true, size > 0);
-  if (size <= 32) {
-    return kSizeMap[size];
-  }
-  return 0;
-}
-
-
-inline void MemoryPool::ChunkBundle::Destroy() {
-  Arena* arena = TlsAlloc();
-  for (size_t i = 0u; i < kIndexSizeMap.size() - 1; i++) {
-    auto chunk_list = arena->chunk_list(i);
-    if (chunk_list->head() != nullptr) {
-      auto chunk = chunk_list->head();
-      while (chunk != nullptr) {
-        ASSERT(true, chunk != nullptr);
-        auto tmp = chunk;
-        chunk = chunk->next();
-        Chunk::Delete(tmp);
-      }
-    }
-  }
-
-  Arena* null_arena = nullptr;
-  if (std::atomic_compare_exchange_weak(&arena_head_, &null_arena, arena)) {
-    arena_tail_.store(arena, std::memory_order_release);
+// ChunkList inline begin
+inline void MemoryPool::ChunkList::AppendFreeList(MemoryPool::MemoryBlock* block) RASP_NOEXCEPT {
+  if (free_head_ == nullptr) {
+    free_head_ = current_free_ = block;
   } else {
-    arena_tail_.load(std::memory_order_acquire)->set_next(arena);
+    current_free_->set_next_ptr(block->ToBegin());
+    current_free_ = block;
+    block->set_next_ptr(nullptr);
   }
-  arena->ReleaseLock();
-  tls_.release();
 }
-
-
-inline MemoryPool::ChunkList* MemoryPool::ChunkBundle::InitChunk(size_t size, size_t default_size, int index) {
-  ChunkList* chunk_list = TlsAlloc()->chunk_list(index);
-  size_t heap_size = index == 0? default_size: RASP_ALIGN_OFFSET(((kIndexSizeMap[index] + (kPointerSize * 2)) * 50), kAlignment);
-  chunk_list->AllocChunkIfNecessary(size, heap_size, mmap_);
-  return chunk_list;
-}
-
-
-MemoryPool::Arena* MemoryPool::ChunkBundle::TlsAlloc() {
-  Arena* arena = nullptr;
-  if (arena_head_.load(std::memory_order_relaxed) != nullptr) {
-    arena = FindUnlockedArena();
-  }
-
-  if (arena == nullptr) {
-    arena = tls_.get();
-    if (arena == NULL) {
-      arena = new(mmap_->Commit(sizeof(Arena))) Arena(mmap_);
-      tls_.reset(arena);
-    }
-  }
-  
-  return arena;
-}
-
-
-MemoryPool::Arena* MemoryPool::ChunkBundle::FindUnlockedArena() {
-  Arena* arena = arena_head_;
-  while (arena != nullptr) {
-    if (arena->AcquireLock()) {
-      return arena;
-    }
-    arena = arena->next();
-  }
-  return arena;
-}
-
-
-RASP_INLINE void MemoryPool::ChunkBundle::AddToFreeList(MemoryPool::MemoryBlock* memory_block) RASP_NOEXCEPT {
-  ASSERT(true, memory_block->IsMarkedAsDealloced());
-  int index = FindBestFitBlockIndex(memory_block->size());
-  TlsAlloc()->chunk_list(index)->AppendFreeList(memory_block);
-}
-
-
-
-inline void MemoryPool::ChunkList::EraseFromDeallocedList(MemoryPool::MemoryBlock* find, MemoryPool::MemoryBlock* last) RASP_NOEXCEPT {
-  if (last != nullptr) {
-    last->set_next_ptr(find->ToNextPtr()->ToBegin());
-  } else {
-    free_head_ = find->ToNextPtr();
-  }
-  find->set_next_ptr(find->next_addr()->ToBegin());
-}
-
 
 
 inline MemoryPool::MemoryBlock* MemoryPool::ChunkList::FindApproximateDeallocedBlock(size_t size) RASP_NOEXCEPT {
@@ -390,18 +271,6 @@ inline MemoryPool::MemoryBlock* MemoryPool::ChunkList::FindApproximateDeallocedB
 }
 
 
-
-inline void MemoryPool::ChunkList::AppendFreeList(MemoryPool::MemoryBlock* block) RASP_NOEXCEPT {
-  if (free_head_ == nullptr) {
-    free_head_ = current_free_ = block;
-  } else {
-    current_free_->set_next_ptr(block->ToBegin());
-    current_free_ = block;
-    block->set_next_ptr(nullptr);
-  }
-}
-
-
 inline void MemoryPool::ChunkList::AllocChunkIfNecessary(size_t size, size_t default_size, Mmap* mmap) {
   if (head_ == nullptr) {
     current_ = head_ = MemoryPool::Chunk::New(default_size, mmap);
@@ -415,22 +284,178 @@ inline void MemoryPool::ChunkList::AllocChunkIfNecessary(size_t size, size_t def
 }
 
 
-MemoryPool::Arena::Arena(Mmap* mmap)
-    : lock_(ATOMIC_FLAG_INIT),
+inline void MemoryPool::ChunkList::EraseFromDeallocedList(MemoryPool::MemoryBlock* find, MemoryPool::MemoryBlock* last) RASP_NOEXCEPT {
+  if (last != nullptr) {
+    last->set_next_ptr(find->ToNextPtr()->ToBegin());
+  } else {
+    free_head_ = find->ToNextPtr();
+  }
+  find->set_next_ptr(find->next_addr()->ToBegin());
+}
+
+
+RASP_INLINE MemoryPool::MemoryBlock* MemoryPool::ChunkList::SwapFreeHead() RASP_NOEXCEPT {
+  MemoryBlock* block = free_head_;
+  free_head_ = block->ToNextPtr();
+  return block;
+}
+// ChunkList inline end
+
+
+// CentralArena inline begin
+inline MemoryPool::MemoryBlock* MemoryPool::CentralArena::Commit(size_t size, size_t default_size) {
+  ASSERT(true, size > 0);
+  int index = FindBestFitBlockIndex(size);
+  ChunkList* chunk_list = InitChunk(size, default_size, index);
+
+  if (chunk_list->free_head() != nullptr) {
+    if (index != 0) {
+      return chunk_list->SwapFreeHead();
+    }
+    
+    MemoryBlock* block = chunk_list->FindApproximateDeallocedBlock(size);
+    if (block != nullptr) {
+      return block;
+    }
+  }
+  
+  return chunk_list->current()->GetBlock(size);
+}
+
+
+inline void MemoryPool::CentralArena::Destroy() {
+  LocalArena* arena = arena_head_;
+  while (arena != nullptr) {
+    for (int i = 0; i < kMaxSmallObjectsCount; i++) {
+      auto chunk_list = arena->chunk_list(i);
+      if (chunk_list->head() != nullptr) {
+        auto chunk = chunk_list->head();
+        while (chunk != nullptr) {
+          ASSERT(true, chunk != nullptr);
+          auto tmp = chunk;
+          chunk = chunk->next();
+          Chunk::Delete(tmp);
+        }
+      }
+    }
+    arena = arena->next();
+  }
+  tls_->ClearTlsData();
+}
+
+
+RASP_INLINE void MemoryPool::CentralArena::AddToFreeList(MemoryPool::MemoryBlock* memory_block) RASP_NOEXCEPT {
+  ASSERT(true, memory_block->IsMarkedAsDealloced());
+  int index = FindBestFitBlockIndex(memory_block->size());
+  TlsAlloc()->chunk_list(index)->AppendFreeList(memory_block);
+}
+
+
+void MemoryPool::CentralArena::FreeArena(MemoryPool::LocalArena* arena) {
+  printf("searching = %d\n", searching_);
+  std::cout << "ReleaseLock addr: " << arena << " thread: " << std::this_thread::get_id() << std::endl;
+  arena->ReleaseLock();
+  tls_->EraseTlsData();
+  searching_.store(0, std::memory_order_relaxed);
+}
+
+
+inline int MemoryPool::CentralArena::FindBestFitBlockIndex(size_t size) {
+  ND_ASSERT(true, size > 0);
+  int index = (size / kAlignment);
+  if (index <= kMaxSmallObjectsCount) {
+    return index;
+  }
+  return 0;
+}
+
+
+MemoryPool::LocalArena* MemoryPool::CentralArena::FindUnlockedArena() {
+  LocalArena* arena = arena_head_;
+  WaitWhileTreeStateIsImmutable();
+  searching_++;
+  while (arena != nullptr) {
+    if (arena->AcquireLock()) {
+      std::cout << "AcquireLock addr: "  << arena << " thread: " << std::this_thread::get_id() << std::endl;
+      return arena;
+    }
+    arena = arena->next();
+  }
+  searching_--;
+  return arena;
+}
+
+
+inline MemoryPool::ChunkList* MemoryPool::CentralArena::InitChunk(size_t size, size_t default_size, int index) {
+  ChunkList* chunk_list = TlsAlloc()->chunk_list(index);
+  size_t heap_size = index == 0? default_size: RASP_ALIGN_OFFSET(((size + (kPointerSize * 2)) * 50), kAlignment);
+  chunk_list->AllocChunkIfNecessary(size, heap_size, mmap_);
+  return chunk_list;
+}
+
+
+MemoryPool::LocalArena* MemoryPool::CentralArena::TlsAlloc() {
+  LocalArena* arena = nullptr;
+  if (arena_head_ != nullptr) {
+    arena = FindUnlockedArena();
+  }
+  printf("addr0 %d %u\n", (arena == nullptr), std::hash<std::thread::id>()(std::this_thread::get_id()));
+  if (arena == nullptr) {
+    MemoryPool::LocalArena* arena = tls_->GetTlsData();
+    printf("addr0-2 %d %u\n", (arena == nullptr), std::hash<std::thread::id>()(std::this_thread::get_id()));
+    if (arena == nullptr) {
+      void* block = mmap_->Commit(sizeof(LocalArena));
+      arena = new(block) LocalArena(this, mmap_);
+      printf("addr1 %p %u\n", arena, std::hash<std::thread::id>()(std::this_thread::get_id()));
+      arena->AcquireLock();
+      AppendArena(arena);
+      tls_->SetTlsData(arena);
+      printf("addr1-2 %p %u\n", arena, std::hash<std::thread::id>()(std::this_thread::get_id()));
+    }
+  }
+  printf("addr2 %p %u\n", arena, std::hash<std::thread::id>()(std::this_thread::get_id()));
+  return arena;
+}
+
+
+void MemoryPool::CentralArena::AppendArena(MemoryPool::LocalArena* arena) {
+  WaitWhileTreeStateIsMutable();
+  ScopedSpinLock lock(lock_);
+  if (arena_head_ == nullptr) {
+    arena_head_ = arena_tail_ = arena;
+  } else {
+    arena_tail_->set_next(arena);
+    arena_tail_ = arena;
+  }
+  NotifyTreeStateMutable();
+}
+// CentralArena inline end
+
+
+// LocalArena inline begin
+MemoryPool::LocalArena::LocalArena(MemoryPool::CentralArena* central_arena, Mmap* mmap)
+    : central_arena_(central_arena),
       mmap_(mmap),
       next_(nullptr) {
-  classed_chunk_list_ = reinterpret_cast<ChunkList*>(mmap_->Commit(sizeof(ChunkList) * 4));
-  for (int i = 0; i < 4; i++) {
+  lock_.clear();
+  classed_chunk_list_ = reinterpret_cast<ChunkList*>(mmap_->Commit(sizeof(ChunkList) * (kMaxSmallObjectsCount + 1)));
+  for (int i = 0; i < kMaxSmallObjectsCount; i++) {
     new(classed_chunk_list_ + i) ChunkList();
   }
 }
 
 
-MemoryPool::Arena::~Arena() {
-  for (int i = 0; i < 4; i++) {
+MemoryPool::LocalArena::~LocalArena() {
+  for (int i = 0; i < kMaxSmallObjectsCount; i++) {
     (classed_chunk_list_ + i)->~ChunkList();
   }
 }
+
+
+void MemoryPool::LocalArena::Return() {
+  central_arena_->FreeArena(this);
+}
+// LocalArena inline end
 
 } // namespace rasp
 

@@ -39,7 +39,7 @@ class Mmap {
 
  private:
   InternalMmap* mmap_;
-  std::atomic<bool> uncommited_;
+  std::atomic_flag uncommited_;
   static const size_t kDefaultByte = 1048576u;
 };
 
