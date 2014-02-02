@@ -114,9 +114,13 @@
           # ... or that C implementations shouldn't use
           # POSIX names
           '_CRT_NONSTDC_NO_DEPRECATE',
+          'PLATFORM_WIN'
         ],
       }],
       [ 'OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris"', {
+        'defines': [
+          'PLATFORM_POSIX'
+        ],
         'variables': {
           'gcc_version%': '<!(python gcc_version.py)>)',
         },
@@ -143,6 +147,9 @@
         ],
       }],
       ['OS=="mac"', {
+        'defines': [
+          'PLATFORM_POSIX'
+        ],
         'xcode_settings': {
           'ALWAYS_SEARCH_USER_PATHS': 'YES',
           'GCC_CW_ASM_SYNTAX': 'NO',                # No -fasm-blocks
@@ -171,8 +178,8 @@
         },
         'link_settings': {
               'libraries': [
-                'libboost_system-mt.a',
-                'libboost_thread-mt.a',
+                #'libboost_system-mt.a',
+                #'libboost_thread-mt.a',
               ],
               'library_dirs': [
                 '/usr/local/lib',

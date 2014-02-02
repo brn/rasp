@@ -40,6 +40,10 @@
 
 
 namespace rasp {
+
+namespace {
+static const size_t kDefaultByte = RASP_ALIGN_OFFSET((10 KB), SystemInfo::GetPageSize());
+}
   
 class Mmap::InternalMmap {
  private:
@@ -74,22 +78,35 @@ class Mmap::InternalMmap {
       used_(0u),
       heap_(nullptr),
       current_(nullptr),
-      last_(nullptr) {
+      last_(nullptr),
+      commited_(0),
+      real_(0){
     lock_.clear();
   }
 
 
   ~InternalMmap() = default;
+
+
+  RASP_INLINE uint64_t commited() RASP_NO_SE {
+    return commited_;
+  }
+
+
+  RASP_INLINE uint64_t real_commited() RASP_NO_SE {
+    return real_;
+  }
   
   
   RASP_INLINE void* Commit(size_t size) {
     ScopedSpinLock lock(spin_lock_);
-    size_t needs = RASP_ALIGN_OFFSET((kPointerSize + size), 4 KB);
+    size_t needs = RASP_ALIGN_OFFSET((kPointerSize + size), kAlignment);
     if (current_map_size_ < needs || (current_map_size_ - used_) < needs || heap_ == nullptr) {
       return Alloc(needs);
     }
     Byte* ret = reinterpret_cast<Byte*>(current_) + used_;
     used_ += size;
+    commited_ += size;
     return static_cast<void*>(ret);
   }
 
@@ -117,6 +134,7 @@ class Mmap::InternalMmap {
     } else {
       heap = current_ = MapAllocator::Allocate(map_size);
     }
+    real_ += map_size;
     used_ = 0u;
     return AddHeader(heap, size);
   }
@@ -130,6 +148,7 @@ class Mmap::InternalMmap {
       last_->set_next(header);
     }
     used_ += size;
+    commited_ += size;
     last_ = header;
     return static_cast<void*>(header->ToValue());
   }
@@ -142,6 +161,8 @@ class Mmap::InternalMmap {
   void* heap_;
   void* current_;
   Header* last_;
+  uint64_t commited_;
+  uint64_t real_;
 };
 
 
@@ -164,6 +185,15 @@ Mmap::Mmap()
 
 Mmap::~Mmap() {
   UnCommit();
+}
+
+uint64_t Mmap::commited_size() RASP_NO_SE {
+  return mmap_->commited();
+}
+
+
+uint64_t Mmap::real_commited_size() RASP_NO_SE {
+  return mmap_->real_commited();
 }
 
 } // namespace rasp

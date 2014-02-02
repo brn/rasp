@@ -22,180 +22,142 @@
  * THE SOFTWARE.
  */
 
+// Borrowed from https://chromium.googlesource.com/chromium/src/base/+/refs/heads/master/threading/thread_local.h
 
 #ifndef UTILS_TLS_H_
 #define UTILS_TLS_H_
 
-#include <type_traits>
-#include <thread>
-#include <unordered_map>
-#include "spinlock.h"
 #include "utils.h"
 
-namespace {
-
-class TypeHolderBase {
- public:
-  virtual ~TypeHolderBase(){}
-  inline virtual void Delete(void*) = 0;
-};
-
-
-typedef size_t TlsKey;
-typedef std::unordered_map<uint64_t, void*> InnerStorage;
-typedef std::unordered_map<uint64_t, TypeHolderBase*> InnerDestructorStorage;
-typedef std::unordered_map<TlsKey, InnerStorage> ThreadLocalPtr;
-typedef std::unordered_map<TlsKey, InnerDestructorStorage> DestructorPtr;
-
-static ThreadLocalPtr tls;
-static DestructorPtr destructors;
-static void Delete(void* p) {delete p;}
-static uint64_t global_id = 0;
-static rasp::SpinLock tls_lock;
-static RASP_INLINE TlsKey GetTlsKey() RASP_NOEXCEPT {
-  return std::hash<std::thread::id>()(std::this_thread::get_id());
-}
-
-inline static void Release() {
-  puts("Delete");
-  rasp::ScopedSpinLock lock(tls_lock);
-  size_t key = GetTlsKey();
-  ThreadLocalPtr::iterator find = tls.find(key);
-  DestructorPtr::iterator d_find = destructors.find(key);
-  if (find != tls.end() && d_find != destructors.end()) {
-    InnerStorage& inner = find->second;
-    InnerDestructorStorage& d_inner = d_find->second;
-    for (auto pair: d_inner) {
-      InnerStorage::iterator it = inner.find(pair.first);
-      if (it != inner.end()) {
-        pair.second->Delete(static_cast<void*>(it->second));
-      }
-      delete pair.second;
-    }
-  }
-  tls.erase(key);
-  destructors.erase(key);
-}
-}
+#if defined(PLATFORM_WIN)
+#include <windows.h>
+#elif defined(PLATFORM_POSIX)
+#include <pthread.h>
+#endif
 
 namespace rasp {
 
-template <typename T>
-class Tls {
-  typedef typename std::remove_pointer<T>::type* ValueType;
-  typedef std::function<void(ValueType)> ReleaseFn;
-
-  
-  class TypeHolder : public TypeHolderBase {
-   public:
-    TypeHolder(ReleaseFn d)
-        : d_(d) {}
-    inline void Delete(void* value) {
-      d_(reinterpret_cast<ValueType>(value));
-    }
-   private:
-    ReleaseFn d_;
-  };
-  
+// WARNING: You should *NOT* be using this class directly.
+// PlatformThreadLocalStorage is low-level abstraction to the OS's TLS
+// interface, you should instead be using ThreadLocalStorage::StaticSlot/Slot.
+class PlatformThreadLocalStorage {
  public:
 
-  template <typename Deleter>
-  Tls(Deleter deleter = &Delete) {
-    ScopedSpinLock lock(tls_lock);
-    tls_id_ = global_id;
-    global_id++;
-    SetDestructor(ReleaseFn(deleter));
-  }
-    
+#if defined(PLATFORM_WIN)
+  typedef unsigned long TLSKey;
+  enum { TLS_KEY_OUT_OF_INDEXES = TLS_OUT_OF_INDEXES };
+#elif defined(PLATFORM_POSIX)
+  typedef pthread_key_t TLSKey;
+  // The following is a "reserved key" which is used in our generic Chromium
+  // ThreadLocalStorage implementation.  We expect that an OS will not return
+  // such a key, but if it is returned (i.e., the OS tries to allocate it) we
+  // will just request another key.
+  enum { TLS_KEY_OUT_OF_INDEXES = 0x7FFFFFFF };
+#endif
 
-  inline ValueType GetTlsData() {
-    ScopedSpinLock lock(tls_lock);
-    ThreadLocalPtr::iterator find = tls.find(GetTlsKey());
-    if (find != tls.end()) {
-      InnerStorage& inner = find->second;
-      InnerStorage::iterator i_find = inner.find(tls_id_);
-      return i_find != inner.end()? reinterpret_cast<ValueType>(i_find->second): nullptr;
-    }
-    return nullptr;
-  }
+  // The following methods need to be supported on each OS platform, so that
+  // the Chromium ThreadLocalStore functionality can be constructed.
+  // Chromium will use these methods to acquire a single OS slot, and then use
+  // that to support a much larger number of Chromium slots (independent of the
+  // OS restrictions).
+  // The following returns true if it successfully is able to return an OS
+  // key in |key|.
+  inline static bool AllocTLS(TLSKey* key);
+  // Note: FreeTLS() doesn't have to be called, it is fine with this leak, OS
+  // might not reuse released slot, you might just reset the TLS value with
+  // SetTLSValue().
+  inline static void FreeTLS(TLSKey key);
+  inline static void SetTLSValue(TLSKey key, void* value);
+  inline static void* GetTLSValue(TLSKey key);
 
-
-  inline void SetTlsData(ValueType value) {
-    ScopedSpinLock lock(tls_lock);
-    size_t key = GetTlsKey();
-    ThreadLocalPtr::iterator find = tls.find(key);
-    if (find != tls.end()) {
-      find->second[tls_id_] = static_cast<void*>(value);
-    } else {
-      InnerStorage inner;
-      inner[tls_id_] = static_cast<void*>(value);
-      tls[key] = std::move(inner);
-    }
-  }
-
-
-  inline void ClearTlsData() {
-    ScopedSpinLock lock(tls_lock);
-    ThreadLocalPtr::iterator find = tls.find(GetTlsKey());
-    if (find != tls.end()) {
-      find->second.clear();
-    }
-  }
-
-
-  inline void EraseTlsData() {
-    ScopedSpinLock lock(tls_lock);
-    size_t key = GetTlsKey();
-    ThreadLocalPtr::iterator find = tls.find(key);
-    if (find != tls.end()) {
-      InnerStorage& inner = find->second;
-      inner.erase(tls_id_);
-      if (inner.size() == 0) {
-        tls.erase(key);
-      }
-    }
-  }
-
-  
- private:
-  inline void SetDestructor(ReleaseFn fn) {
-    size_t key = GetTlsKey();
-    DestructorPtr::iterator find = destructors.find(key);
-    if (find != destructors.end()) {
-      find->second[tls_id_] = new TypeHolder(fn);
-    } else {
-      InnerDestructorStorage inner;
-      inner[tls_id_] = new TypeHolder(fn);
-      destructors[key] = std::move(inner);
-    }
-  }
-  
-  uint64_t tls_id_;
+  // Each platform (OS implementation) is required to call this method on each
+  // terminating thread when the thread is about to terminate.  This method
+  // will then call all registered destructors for slots in Chromium
+  // ThreadLocalStorage, until there are no slot values remaining as having
+  // been set on this thread.
+  // Destructors may end up being called multiple times on a terminating
+  // thread, as other destructors may re-set slots that were previously
+  // destroyed.
+#if defined(PLATFORM_WIN)
+  // Since Windows which doesn't support TLS destructor, the implementation
+  // should use GetTLSValue() to retrieve the value of TLS slot.
+  static void OnThreadExit();
+#elif defined(PLATFORM_POSIX)
+  // |Value| is the data stored in TLS slot, The implementation can't use
+  // GetTLSValue() to retrieve the value of slot as it has already been reset
+  // in Posix.
+  static void OnThreadExit(void* value);
+#endif
 };
-}
 
-#ifdef _WIN32
-#include <windows.h>
-#include <winnt.h>
-namespace {
+// Wrapper for thread local storage.  This class doesn't do much except provide
+// an API for portability.
+class ThreadLocalStorage : private Uncopyable {
+ public:
 
-void NTAPI tls_callback( void*, DWORD dwReason, void* ) { 
-  if (dwReason == DLL_THREAD_DETACH) {
-    Release();
-  }
-} 
+  // Prototype for the TLS destructor function, which can be optionally used to
+  // cleanup thread local storage on thread exit.  'value' is the data that is
+  // stored in thread local storage.
+  typedef void (*TLSDestructorFunc)(void* value);
 
-// Add callback to the TLS callback list in TLS directory.
-#pragma data_seg(push, old_seg)
-#pragma data_seg(".CRT$XLB")
-DWORD tls_callback_ptr = (DWORD)tls_callback;
-#pragma data_seg(pop, old_seg)
+  // StaticSlot uses its own struct initializer-list style static
+  // initialization, as base's LINKER_INITIALIZED requires a constructor and on
+  // some compilers (notably gcc 4.4) this still ends up needing runtime
+  // initialization.
+  #define TLS_INITIALIZER {0}
 
-extern "C" int _tls_used;
-int dummy() {
-  return _tls_used;
-}
+  // A key representing one value stored in TLS.
+  // Initialize like
+  //   ThreadLocalStorage::StaticSlot my_slot = TLS_INITIALIZER;
+  // If you're not using a static variable, use the convenience class
+  // ThreadLocalStorage::Slot (below) instead.
+  struct StaticSlot {
+    // Set up the TLS slot.  Called by the constructor.
+    // 'destructor' is a pointer to a function to perform per-thread cleanup of
+    // this object.  If set to NULL, no cleanup is done for this TLS slot.
+    // Returns false on error.
+    bool Initialize(TLSDestructorFunc destructor);
 
-}
+    // Free a previously allocated TLS 'slot'.
+    // If a destructor was set for this slot, removes
+    // the destructor so that remaining threads exiting
+    // will not free data.
+    void Free();
+
+    // Get the thread-local value stored in slot 'slot'.
+    // Values are guaranteed to initially be zero.
+    void* Get() const;
+
+    // Set the thread-local value stored in slot 'slot' to
+    // value 'value'.
+    void Set(void* value);
+
+    bool initialized() const { return initialized_; }
+
+    // The internals of this struct should be considered private.
+    bool initialized_;
+    int slot_;
+  };
+
+  // A convenience wrapper around StaticSlot with a constructor. Can be used
+  // as a member variable.
+  class Slot : public StaticSlot, private Uncopyable {
+   public:
+    // Calls StaticSlot::Initialize().
+    explicit Slot(TLSDestructorFunc destructor = nullptr);
+
+   private:
+    using StaticSlot::initialized_;
+    using StaticSlot::slot_;
+  };
+};
+
+}  // namespace rasp
+
+#if defined(PLATFORM_WIN)
+#include "tls-win-inl.h"
+#elif defined(PLATFORM_POSIX)
+#include "tls-win-posix.h"
 #endif
-#endif
+
+#endif  // UTILS_TLS_H_

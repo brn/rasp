@@ -87,6 +87,8 @@
       'include_dirs' : ['./lib', '<(additional_include)'],
       'defines' : ['GTEST_HAS_RTTI=0', 'UNIT_TEST=1'],
       'sources': [
+        './src/utils/systeminfo.cc',
+        './src/utils/tls.cc',
         './src/utils/os.cc',
         './src/utils/memorypool.cc',
         './lib/gtest/gtest-all.cc',

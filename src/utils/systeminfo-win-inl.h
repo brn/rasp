@@ -22,35 +22,32 @@
  * THE SOFTWARE.
  */
 
+#ifndef UTILS_SYSTEMINFO_WIN_INL_H_
+#define UTILS_SYSTEMINFO_WIN_INL_H_
 
-#ifndef UTILS_SPIN_LOCK_H_
-#define UTILS_SPIN_LOCK_H_
-
-#include <atomic>
-#include <mutex>
-#include "utils.h"
+#include <windows.h>
 
 namespace rasp {
-class SpinLock {
+
+class SystemInfoPlatform {
  public:
-  SpinLock() {unlock();}
-  ~SpinLock() = default;
-  RASP_INLINE void lock() RASP_NOEXCEPT {
-    while (lock_.test_and_set(std::memory_order_acquire)){}
+  SystemInfoPlatform() {
+    GetSystemInfo(&info_);
   }
 
-  
-  RASP_INLINE void unlock() RASP_NOEXCEPT {
-    lock_.clear(std::memory_order_release);
+  long GetOnlineProcessorCount() RASP_NO_SE {
+    return info_.dwNumberOfProcessors;
+  }
+
+
+  long GetPageSize() RASP_NO_SE {
+    return info_.dwPageSize;
   }
 
  private:
-  std::atomic_flag lock_;
+  SYSTEM_INFO info_;
 };
 
-
-typedef std::lock_guard<SpinLock> ScopedSpinLock;
-typedef std::unique_lock<SpinLock> UniqueSpinLock;
 }
 
 #endif

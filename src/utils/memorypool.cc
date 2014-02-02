@@ -60,10 +60,39 @@ MemoryPool& MemoryPool::operator = (MemoryPool&& memory_pool) {
 }
 
 
-void MemoryPool::Destroy() RASP_NOEXCEPT {
-  if (!deleted_.test_and_set()) {
-    central_arena_->Destroy();
+void MemoryPool::CentralArena::Destroy() {
+  LocalArena* arena = arena_head_.load(std::memory_order_relaxed);
+  while (arena != nullptr) {
+    for (int i = 0; i < kMaxSmallObjectsCount; i++) {
+      auto chunk_list = arena->chunk_list(i);
+      if (chunk_list->head() != nullptr) {
+        auto chunk = chunk_list->head();
+        while (chunk != nullptr) {
+          ASSERT(true, chunk != nullptr);
+          auto tmp = chunk;
+          chunk = chunk->next();
+          Chunk::Delete(tmp);
+        }
+      }
+    }
+    arena = arena->next();
   }
+  tls_->~Slot();
+}
+
+
+void MemoryPool::CentralArena::Dealloc(void* object) {
+  ScopedSpinLock lock(dealloc_lock_);
+  Byte* block = reinterpret_cast<Byte*>(object);
+  block -= MemoryPool::kValueOffset;
+  MemoryPool::MemoryBlock* memory_block = reinterpret_cast<MemoryPool::MemoryBlock*>(block);
+
+  RASP_CHECK(true, !memory_block->IsMarkedAsDealloced());
+  memory_block->ToValue()->~Poolable();
+  memory_block->MarkAsDealloced();
+  ASSERT(true, memory_block->IsMarkedAsDealloced());
+  int index = FindBestFitBlockIndex(memory_block->size());
+  TlsAlloc()->chunk_list(index)->AppendFreeList(memory_block);
 }
 
 } //namespace rasp

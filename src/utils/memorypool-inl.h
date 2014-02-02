@@ -122,16 +122,16 @@ inline MemoryPool::MemoryPool(size_t size)
 }
 
 
-inline void MemoryPool::Dealloc(void* object) {  
-  Byte* block = reinterpret_cast<Byte*>(object);
-  block -= MemoryPool::kValueOffset;
-  MemoryPool::MemoryBlock* memory_block = reinterpret_cast<MemoryPool::MemoryBlock*>(block);
+void MemoryPool::Destroy() RASP_NOEXCEPT {
+  if (!deleted_.test_and_set()) {
+    central_arena_->Destroy();
+  }
+}
 
-  ND_ASSERT(true, !memory_block->IsMarkedAsDealloced());
-  
-  memory_block->ToValue()->~Poolable();
-  memory_block->MarkAsDealloced();
-  central_arena_->AddToFreeList(memory_block);
+
+
+void MemoryPool::Dealloc(void* object) RASP_NOEXCEPT {
+  central_arena_->Dealloc(object);
 }
 
 
@@ -323,46 +323,14 @@ inline MemoryPool::MemoryBlock* MemoryPool::CentralArena::Commit(size_t size, si
 }
 
 
-inline void MemoryPool::CentralArena::Destroy() {
-  LocalArena* arena = arena_head_;
-  while (arena != nullptr) {
-    for (int i = 0; i < kMaxSmallObjectsCount; i++) {
-      auto chunk_list = arena->chunk_list(i);
-      if (chunk_list->head() != nullptr) {
-        auto chunk = chunk_list->head();
-        while (chunk != nullptr) {
-          ASSERT(true, chunk != nullptr);
-          auto tmp = chunk;
-          chunk = chunk->next();
-          Chunk::Delete(tmp);
-        }
-      }
-    }
-    arena = arena->next();
-  }
-  tls_->~ThreadLocalArenaPtr();
-  puts("Destroied");
-}
-
-
-RASP_INLINE void MemoryPool::CentralArena::AddToFreeList(MemoryPool::MemoryBlock* memory_block) RASP_NOEXCEPT {
-  ASSERT(true, memory_block->IsMarkedAsDealloced());
-  int index = FindBestFitBlockIndex(memory_block->size());
-  TlsAlloc()->chunk_list(index)->AppendFreeList(memory_block);
-}
-
-
 void MemoryPool::CentralArena::FreeArena(MemoryPool::LocalArena* arena) {
-  printf("searching = %d\n", searching_);
-  std::cout << "ReleaseLock addr: " << arena << " thread: " << std::this_thread::get_id() << std::endl;
+  //std::cout << "ReleaseLock addr: " << arena << " thread: " << std::this_thread::get_id() << std::endl;
   arena->ReleaseLock();
-  tls_->release();
-  searching_.store(0, std::memory_order_relaxed);
 }
 
 
 inline int MemoryPool::CentralArena::FindBestFitBlockIndex(size_t size) {
-  ND_ASSERT(true, size > 0);
+  RASP_CHECK(true, size > 0);
   int index = (size / kAlignment);
   if (index <= kMaxSmallObjectsCount) {
     return index;
@@ -372,22 +340,20 @@ inline int MemoryPool::CentralArena::FindBestFitBlockIndex(size_t size) {
 
 
 MemoryPool::LocalArena* MemoryPool::CentralArena::FindUnlockedArena() {
-  LocalArena* arena = arena_head_;
-  WaitWhileTreeStateIsImmutable();
-  searching_++;
+  LocalArena* arena = arena_head_.load(std::memory_order_relaxed);
   while (arena != nullptr) {
     if (arena->AcquireLock()) {
-      std::cout << "AcquireLock addr: "  << arena << " thread: " << std::this_thread::get_id() << std::endl;
+      //std::cout << "AcquireLock addr: "  << arena << " thread: " << std::this_thread::get_id() << std::endl;
       return arena;
     }
     arena = arena->next();
   }
-  searching_--;
-  return arena;
+  return nullptr;
 }
 
 
-inline MemoryPool::ChunkList* MemoryPool::CentralArena::InitChunk(size_t size, size_t default_size, int index) {
+inline MemoryPool::ChunkList* MemoryPool::CentralArena::InitChunk(
+    size_t size, size_t default_size, int index) {
   ChunkList* chunk_list = TlsAlloc()->chunk_list(index);
   size_t heap_size = index == 0? default_size: RASP_ALIGN_OFFSET(((size + (kPointerSize * 2)) * 50), kAlignment);
   chunk_list->AllocChunkIfNecessary(size, heap_size, mmap_);
@@ -397,20 +363,18 @@ inline MemoryPool::ChunkList* MemoryPool::CentralArena::InitChunk(size_t size, s
 
 MemoryPool::LocalArena* MemoryPool::CentralArena::TlsAlloc() {
   LocalArena* arena = nullptr;
-  if (arena_head_ != nullptr) {
+  if (arena_head_.load(std::memory_order_acquire) != nullptr) {
     arena = FindUnlockedArena();
   }
 
   if (arena == nullptr) {
-    arena = tls_->get();
-
+    arena = reinterpret_cast<LocalArena*>(tls_->Get());
     if (arena == nullptr) {
       void* block = mmap_->Commit(sizeof(LocalArena));
       arena = new(block) LocalArena(this, mmap_);
-
       arena->AcquireLock();
-      AppendArena(arena);
-      tls_->reset(arena);
+      StoreNewLocalArena(arena);
+      tls_->Set(arena);
       return arena;
     }
   }
@@ -419,16 +383,15 @@ MemoryPool::LocalArena* MemoryPool::CentralArena::TlsAlloc() {
 }
 
 
-void MemoryPool::CentralArena::AppendArena(MemoryPool::LocalArena* arena) {
-  WaitWhileTreeStateIsMutable();
-  ScopedSpinLock lock(lock_);
-  if (arena_head_ == nullptr) {
-    arena_head_ = arena_tail_ = arena;
-  } else {
-    arena_tail_->set_next(arena);
-    arena_tail_ = arena;
+void MemoryPool::CentralArena::StoreNewLocalArena(MemoryPool::LocalArena* arena) {
+  LocalArena* null1 = nullptr;
+  LocalArena* null2 = nullptr;
+  bool head = !arena_head_.compare_exchange_weak(null1, arena);
+  bool tail = !arena_tail_.compare_exchange_weak(null2, arena_head_.load(std::memory_order_relaxed));
+  if (head && tail) {
+    arena_tail_.load()->set_next(arena);
+    arena_tail_.store(arena);
   }
-  NotifyTreeStateMutable();
 }
 // CentralArena inline end
 

@@ -35,13 +35,9 @@
 #include <deque>
 #include <algorithm>
 #include "utils.h"
-#include <boost/thread.hpp>
-#include "../config.h"
+#include "tls.h"
 #include "mmap.h"
-
-#ifdef UNIT_TEST
-#include <vector>
-#endif
+#include "../config.h"
 
 namespace rasp {
 
@@ -55,16 +51,11 @@ class Poolable {
   inline void operator delete[] (void* ptr){};
   inline void operator delete (void* ptr, MemoryPool* pool);
   inline void operator delete[] (void* ptr, MemoryPool* pool);
-  virtual ~Poolable(){}
+  virtual ~Poolable() {}
 };
 
 
-/**
- * The pointer lifetime managable allocator.
- * This memory space is allocation only,
- * it can not free an each space, to free memory block,
- * destroy MemoryPool class.
- */
+
 class MemoryPool : private Uncopyable {
   friend class Poolable;
  private:
@@ -89,7 +80,7 @@ class MemoryPool : private Uncopyable {
   /**
    * Free all allocated memory.
    */
-  void Destroy() RASP_NOEXCEPT;
+  RASP_INLINE void Destroy() RASP_NOEXCEPT;
   
 
   /**
@@ -98,7 +89,37 @@ class MemoryPool : private Uncopyable {
    * This method add memory block to the free list and call destructor.
    * @param object The object pointer that is allocated by MemoryPool::Allocate[Array].
    */
-  inline void Dealloc(void* object);
+  RASP_INLINE void Dealloc(void* object) RASP_NOEXCEPT;
+
+
+  RASP_INLINE double commited_bytes() RASP_NO_SE {
+    return static_cast<double>(allocator_.commited_size());
+  }
+
+
+  RASP_INLINE double commited_kbytes() RASP_NO_SE {
+    return static_cast<double>(allocator_.commited_size()) / 1024;
+  }
+
+
+  RASP_INLINE double commited_mbytes() RASP_NO_SE {
+    return static_cast<double>(allocator_.commited_size()) / 1024 / 1024;
+  }
+
+
+  RASP_INLINE double real_commited_bytes() RASP_NO_SE {
+    return static_cast<double>(allocator_.real_commited_size());
+  }
+
+
+  RASP_INLINE double real_commited_kbytes() RASP_NO_SE {
+    return static_cast<double>(allocator_.real_commited_size()) / 1024;
+  }
+
+
+  RASP_INLINE double real_commited_mbytes() RASP_NO_SE {
+    return static_cast<double>(allocator_.real_commited_size()) / 1024 / 1024;
+  }
   
  private :
 
@@ -247,24 +268,22 @@ class MemoryPool : private Uncopyable {
   
 
   class CentralArena {
-    typedef boost::thread_specific_ptr<MemoryPool::LocalArena> ThreadLocalArenaPtr;
    public:
     CentralArena(Mmap* mmap)
         : arena_head_(nullptr),
           arena_tail_(nullptr),
           mmap_(mmap) {
-      tls_ = new(mmap_->Commit(sizeof(ThreadLocalArenaPtr))) ThreadLocalArenaPtr(&TlsFree);
-      searching_ = 0;
+      tls_ = new(mmap_->Commit(sizeof(ThreadLocalStorage::Slot))) ThreadLocalStorage::Slot(&TlsFree);
     }
 
     
     inline MemoryPool::MemoryBlock* Commit(size_t size, size_t default_size);
 
     
-    inline void Destroy();
+    void Destroy();
 
 
-    RASP_INLINE void AddToFreeList(MemoryPool::MemoryBlock* memory_block) RASP_NOEXCEPT;
+    void Dealloc(void* object);
 
 
     inline void FreeArena(MemoryPool::LocalArena* arena);
@@ -283,39 +302,21 @@ class MemoryPool : private Uncopyable {
     RASP_INLINE MemoryPool::LocalArena* TlsAlloc();
     
 
-    inline void AppendArena(MemoryPool::LocalArena* arena);
-
-    
-    inline void WaitWhileTreeStateIsMutable() {
-      int not_searching = 0;
-      while(!searching_.compare_exchange_weak(not_searching, -1)) {
-        not_searching = 0;
-      }
-    }
-
-
-    inline void WaitWhileTreeStateIsImmutable() {
-      while(searching_ == -1){}
-    }
-
-
-    inline void NotifyTreeStateMutable() {
-      searching_.store(0, std::memory_order_release);
-    }
+    inline void StoreNewLocalArena(MemoryPool::LocalArena* arena);
     
 
-    LocalArena* arena_head_;
-    LocalArena* arena_tail_;
-    std::atomic_int searching_;
+    std::atomic<LocalArena*> arena_head_;
+    std::atomic<LocalArena*> arena_tail_;
 
     Mmap* mmap_;
     SpinLock lock_;
-    ThreadLocalArenaPtr* tls_;
+    SpinLock dealloc_lock_;
+    ThreadLocalStorage::Slot* tls_;
     
     static const int kSmallMax = 3 KB;
 
-    static inline void TlsFree(LocalArena* arena) {
-      arena->Return();
+    static inline void TlsFree(void* arena) {
+      reinterpret_cast<MemoryPool::LocalArena*>(arena)->Return();
     }
   };
 
@@ -326,12 +327,12 @@ class MemoryPool : private Uncopyable {
     inline ~LocalArena();
     
     inline LocalArena* next() RASP_NO_SE {
-      return next_;
+      return next_.load();
     }
 
 
     inline void set_next(LocalArena* chunk_list) RASP_NOEXCEPT {
-      next_ = chunk_list;
+      next_.store(chunk_list);
     }
 
 
@@ -356,7 +357,7 @@ class MemoryPool : private Uncopyable {
     std::atomic_flag lock_;
     Mmap* mmap_;
     ChunkList* classed_chunk_list_;
-    LocalArena* next_;
+    std::atomic<LocalArena*> next_;
   };
   
 
@@ -370,6 +371,7 @@ class MemoryPool : private Uncopyable {
 
   size_t size_;
   std::atomic_flag deleted_;
+  SpinLock tree_lock_;
   
   Mmap allocator_;
 

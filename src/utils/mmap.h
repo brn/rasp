@@ -27,6 +27,7 @@
 #define UTILS_MMAP_H_
 
 #include <atomic>
+#include "systeminfo.h"
 
 namespace rasp {
 class Mmap {
@@ -36,11 +37,12 @@ class Mmap {
   inline ~Mmap();
   RASP_INLINE void* Commit(size_t size);
   RASP_INLINE void UnCommit();
+  RASP_INLINE uint64_t commited_size() RASP_NO_SE;
+  RASP_INLINE uint64_t real_commited_size() RASP_NO_SE;
 
  private:
   InternalMmap* mmap_;
   std::atomic_flag uncommited_;
-  static const size_t kDefaultByte = 1048576u;
 };
 
 }

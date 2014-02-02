@@ -22,35 +22,52 @@
  * THE SOFTWARE.
  */
 
-
-#ifndef UTILS_SPIN_LOCK_H_
-#define UTILS_SPIN_LOCK_H_
-
-#include <atomic>
-#include <mutex>
-#include "utils.h"
+#include "systeminfo.h"
 
 namespace rasp {
-class SpinLock {
- public:
-  SpinLock() {unlock();}
-  ~SpinLock() = default;
-  RASP_INLINE void lock() RASP_NOEXCEPT {
-    while (lock_.test_and_set(std::memory_order_acquire)){}
-  }
-
-  
-  RASP_INLINE void unlock() RASP_NOEXCEPT {
-    lock_.clear(std::memory_order_release);
-  }
-
- private:
-  std::atomic_flag lock_;
-};
 
 
-typedef std::lock_guard<SpinLock> ScopedSpinLock;
-typedef std::unique_lock<SpinLock> UniqueSpinLock;
+size_t SystemInfo::GetOnlineProcessorCount() {
+  Initialize();
+  return system_info_platform_->GetOnlineProcessorCount();
 }
 
-#endif
+
+size_t SystemInfo::GetPageSize() {
+  Initialize();
+  return system_info_platform_->GetPageSize();
+}
+
+
+SystemInfoPlatform* SystemInfo::GetPlatform() {
+  return system_info_platform_;
+}
+
+
+void SystemInfo::Initialize() {
+  bool i = false;
+  if (initialized_.compare_exchange_weak(i, true)) {
+    system_info_platform_ = new SystemInfoPlatform();
+  }
+}
+
+
+std::atomic<bool> SystemInfo::initialized_ = false;
+SystemInfoPlatform* SystemInfo::system_info_platform_ = nullptr;
+
+
+namespace {
+class Destructor {
+ public:
+  ~Destructor() {
+    rasp::SystemInfoPlatform* p = rasp::SystemInfo::GetPlatform();
+    if (p != nullptr) {
+      delete p;
+    }
+  }
+};
+
+static Destructor d;
+}
+
+}

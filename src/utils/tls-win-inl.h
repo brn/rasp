@@ -22,35 +22,39 @@
  * THE SOFTWARE.
  */
 
+// Borrowed from http://src.chromium.org/chrome/trunk/src/base/threading/thread_local_storage_win.cc
 
-#ifndef UTILS_SPIN_LOCK_H_
-#define UTILS_SPIN_LOCK_H_
+#ifndef UTILS_TLS_WIN_INL_H_
+#define UTILS_TLS_WIN_INL_H_
 
-#include <atomic>
-#include <mutex>
-#include "utils.h"
+#include <windows.h>
+#include "tls.h"
 
 namespace rasp {
-class SpinLock {
- public:
-  SpinLock() {unlock();}
-  ~SpinLock() = default;
-  RASP_INLINE void lock() RASP_NOEXCEPT {
-    while (lock_.test_and_set(std::memory_order_acquire)){}
+
+bool PlatformThreadLocalStorage::AllocTLS(TLSKey* key) {
+  TLSKey value = TlsAlloc();
+  if (value != TLS_OUT_OF_INDEXES) {
+    *key = value;
+    return true;
   }
-
-  
-  RASP_INLINE void unlock() RASP_NOEXCEPT {
-    lock_.clear(std::memory_order_release);
-  }
-
- private:
-  std::atomic_flag lock_;
-};
-
-
-typedef std::lock_guard<SpinLock> ScopedSpinLock;
-typedef std::unique_lock<SpinLock> UniqueSpinLock;
+  return false;
 }
 
-#endif
+void PlatformThreadLocalStorage::FreeTLS(TLSKey key) {
+  BOOL ret = TlsFree(key);
+  ASSERT(true, !!ret);
+}
+
+void* PlatformThreadLocalStorage::GetTLSValue(TLSKey key) {
+  return TlsGetValue(key);
+}
+
+void PlatformThreadLocalStorage::SetTLSValue(TLSKey key, void* value) {
+  BOOL ret = TlsSetValue(key, value);
+  ASSERT(true, !!ret);
+}
+
+}  // namespace rasp
+
+#endif // UTILS_TLS_WIN_INL_H_

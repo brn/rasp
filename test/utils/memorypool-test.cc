@@ -25,9 +25,12 @@
 #include <gtest/gtest.h>
 #include <random>
 #include <thread>
+#include <memory>
 #include "../../src/utils/memorypool.h"
+#include "../../src/utils/systeminfo.h"
 
 static const uint64_t kSize = 1000000u;
+static const int kThreadSize = rasp::SystemInfo::GetOnlineProcessorCount();
 
 
 class Test0 {
@@ -99,7 +102,7 @@ class Array : public rasp::Poolable {
   ~Array() {(*ok) = true;}
 };
 
-/*
+
 TEST(MemoryPoolTest, MemoryPoolTest_allocate_from_chunk) {
   uint64_t ok = 0u;
   rasp::MemoryPool p(1024);
@@ -107,7 +110,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_from_chunk) {
   p.Destroy();
   ASSERT_EQ(ok, 1u);
 }
-*/
+
 
 TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk) {
   rasp::MemoryPool p(1024);
@@ -119,7 +122,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk) {
   ASSERT_EQ(kSize, ok);
 }
 
-/*
+
 TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_random) {
   uint64_t ok = 0u;
   std::random_device rd;
@@ -240,15 +243,14 @@ TEST(MemoryPoolTest, MemoryPoolTest_performance3) {
     delete c;
   }
   ASSERT_EQ(kSize, ok);
-}*/
+}
 
 
 TEST(MemoryPoolTest, MemoryPoolTest_thread) {
-  static const int kSize = 100000;
-  static const int kThreadSize = 6;
+  static const int kSize = 10000;  
   uint64_t ok = 0u;
   rasp::MemoryPool p(1024);
-  int index = 0;
+  std::atomic<int> index(0);
   auto fn = [&]() {
     for (uint64_t i = 0u; i < kSize; i++) {
       new(&p) Test1(&ok);
@@ -270,6 +272,102 @@ TEST(MemoryPoolTest, MemoryPoolTest_thread) {
 
   while(index != kThreadSize) {}
   
+  p.Destroy();
+  ASSERT_EQ(kSize * kThreadSize, ok);
+}
+
+
+TEST(MemoryPoolTest, MemoryPoolTest_thread_random) {
+  static const int kSize = 10000;
+  uint64_t ok = 0u;
+  rasp::MemoryPool p(1024);
+  std::atomic<int> index(0);
+  auto fn = [&]() {
+    std::random_device rd;
+    std::mt19937 mt(rd());
+    std::uniform_int_distribution<size_t> size(1, 100);
+    for (uint64_t i = 0u; i < kSize; i++) {
+      int s = size(mt);
+      int t = s % 3 == 0;
+      int f = s % 5 == 0;
+      if (t) {
+        new(&p) Test1(&ok);
+      } else if (f) {
+        new(&p) Test2(&ok);
+      } else {
+        new(&p) Test3(&ok);
+      }
+    }
+    index++;
+  };
+  
+  std::vector<std::thread*> threads;
+  for (int i = 0; i < kThreadSize; i++) {
+    auto th = new std::thread(fn);
+    threads.push_back(th);
+  }
+  for (int i = 0; i < kThreadSize; i++) {
+    //if (threads[i]->joinable()) {
+      threads[i]->detach();
+      //}
+    delete threads[i];
+  }
+
+  while(index != kThreadSize) {}
+  
+  p.Destroy();
+  ASSERT_EQ(kSize * kThreadSize, ok);
+}
+
+
+TEST(MemoryPoolTest, MemoryPoolTest_thread_random_dealloc) {
+  static const int kSize = 10000;
+  uint64_t ok = 0u;
+  rasp::MemoryPool p(1024);
+  std::atomic<int> index(0);
+  auto fn = [&]() {
+    std::random_device rd;
+    std::mt19937 mt(rd());
+    std::uniform_int_distribution<size_t> size(1, 100);
+    void* last = nullptr;
+    int dc =0;
+    for (uint64_t i = 0u; i < kSize; i++) {
+      int s = size(mt);
+      int ss = s % 6 == 0;
+      int t = s % 3 == 0;
+      int f = s % 5 == 0;
+
+      if (ss) {
+        if (last != nullptr) {
+          dc++;
+          p.Dealloc(last);
+        }
+      }
+    
+      if (t) {
+        last = new(&p) Test1(&ok);
+      } else if (f) {
+        last = new(&p) Test2(&ok);
+      } else {
+        last = new(&p) Test3(&ok);
+      }
+    }
+    index++;
+  };
+  
+  std::vector<std::thread*> threads;
+  for (int i = 0; i < kThreadSize; i++) {
+    auto th = new std::thread(fn);
+    threads.push_back(th);
+  }
+  for (int i = 0; i < kThreadSize; i++) {
+    //if (threads[i]->joinable()) {
+      threads[i]->detach();
+      //}
+    delete threads[i];
+  }
+
+  while(index != kThreadSize) {}
   p.Destroy();
   ASSERT_EQ(kSize * kThreadSize, ok);
 }

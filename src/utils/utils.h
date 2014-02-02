@@ -91,8 +91,7 @@ RASP_INLINE void Fatal__(const char* file, int line, const char* function, const
 #endif
 
 
-#define ND_ASSERT(expect, result) Assert__(result == expect, #result, #expect, __FILE__, __LINE__, __PRETTY_FUNCTION__, "")
-#define ND_ASSERT_MESSAGE(expect, result, message) Assert__(result == expect, #result, #expect, __FILE__, __LINE__, __PRETTY_FUNCTION__, std::string(message))
+#define RASP_CHECK(expect, result, ...) Assert__(result == expect, #result, #expect, __FILE__, __LINE__, __PRETTY_FUNCTION__, std::string(__VA_ARGS__))
 
 // ASSERT macro definition end.
 
