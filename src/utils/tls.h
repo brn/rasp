@@ -57,6 +57,7 @@ static RASP_INLINE TlsKey GetTlsKey() RASP_NOEXCEPT {
 }
 
 inline static void Release() {
+  puts("Delete");
   rasp::ScopedSpinLock lock(tls_lock);
   size_t key = GetTlsKey();
   ThreadLocalPtr::iterator find = tls.find(key);
@@ -110,11 +111,10 @@ class Tls {
   inline ValueType GetTlsData() {
     ScopedSpinLock lock(tls_lock);
     ThreadLocalPtr::iterator find = tls.find(GetTlsKey());
-    std::cout << "1 " <<  GetTlsKey() << std::endl;
     if (find != tls.end()) {
       InnerStorage& inner = find->second;
-      InnerStorage::iterator find = inner.find(tls_id_);
-      return find != inner.end()? reinterpret_cast<ValueType>(find->second): nullptr;
+      InnerStorage::iterator i_find = inner.find(tls_id_);
+      return i_find != inner.end()? reinterpret_cast<ValueType>(i_find->second): nullptr;
     }
     return nullptr;
   }
@@ -130,7 +130,6 @@ class Tls {
       InnerStorage inner;
       inner[tls_id_] = static_cast<void*>(value);
       tls[key] = std::move(inner);
-      std::cout << "2 " <<  GetTlsKey() << " " << value << std::endl;
     }
   }
 

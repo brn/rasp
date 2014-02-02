@@ -340,7 +340,8 @@ inline void MemoryPool::CentralArena::Destroy() {
     }
     arena = arena->next();
   }
-  tls_->ClearTlsData();
+  tls_->~ThreadLocalArenaPtr();
+  puts("Destroied");
 }
 
 
@@ -355,7 +356,7 @@ void MemoryPool::CentralArena::FreeArena(MemoryPool::LocalArena* arena) {
   printf("searching = %d\n", searching_);
   std::cout << "ReleaseLock addr: " << arena << " thread: " << std::this_thread::get_id() << std::endl;
   arena->ReleaseLock();
-  tls_->EraseTlsData();
+  tls_->release();
   searching_.store(0, std::memory_order_relaxed);
 }
 
@@ -399,21 +400,21 @@ MemoryPool::LocalArena* MemoryPool::CentralArena::TlsAlloc() {
   if (arena_head_ != nullptr) {
     arena = FindUnlockedArena();
   }
-  printf("addr0 %d %u\n", (arena == nullptr), std::hash<std::thread::id>()(std::this_thread::get_id()));
+
   if (arena == nullptr) {
-    MemoryPool::LocalArena* arena = tls_->GetTlsData();
-    printf("addr0-2 %d %u\n", (arena == nullptr), std::hash<std::thread::id>()(std::this_thread::get_id()));
+    arena = tls_->get();
+
     if (arena == nullptr) {
       void* block = mmap_->Commit(sizeof(LocalArena));
       arena = new(block) LocalArena(this, mmap_);
-      printf("addr1 %p %u\n", arena, std::hash<std::thread::id>()(std::this_thread::get_id()));
+
       arena->AcquireLock();
       AppendArena(arena);
-      tls_->SetTlsData(arena);
-      printf("addr1-2 %p %u\n", arena, std::hash<std::thread::id>()(std::this_thread::get_id()));
+      tls_->reset(arena);
+      return arena;
     }
   }
-  printf("addr2 %p %u\n", arena, std::hash<std::thread::id>()(std::this_thread::get_id()));
+  
   return arena;
 }
 

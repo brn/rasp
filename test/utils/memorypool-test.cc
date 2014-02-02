@@ -107,7 +107,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_from_chunk) {
   p.Destroy();
   ASSERT_EQ(ok, 1u);
 }
-
+*/
 
 TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk) {
   rasp::MemoryPool p(1024);
@@ -119,7 +119,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk) {
   ASSERT_EQ(kSize, ok);
 }
 
-
+/*
 TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_random) {
   uint64_t ok = 0u;
   std::random_device rd;

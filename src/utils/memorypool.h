@@ -35,7 +35,7 @@
 #include <deque>
 #include <algorithm>
 #include "utils.h"
-#include "tls.h"
+#include <boost/thread.hpp>
 #include "../config.h"
 #include "mmap.h"
 
@@ -247,14 +247,13 @@ class MemoryPool : private Uncopyable {
   
 
   class CentralArena {
-    typedef double TlsKey;
-    typedef std::unordered_map<TlsKey, MemoryPool::LocalArena*> ThreadLocalArenaPtr;
+    typedef boost::thread_specific_ptr<MemoryPool::LocalArena> ThreadLocalArenaPtr;
    public:
     CentralArena(Mmap* mmap)
         : arena_head_(nullptr),
           arena_tail_(nullptr),
           mmap_(mmap) {
-      tls_ = new(mmap_->Commit(sizeof(Tls<MemoryPool::LocalArena*>))) Tls<MemoryPool::LocalArena*>(&TlsFree);
+      tls_ = new(mmap_->Commit(sizeof(ThreadLocalArenaPtr))) ThreadLocalArenaPtr(&TlsFree);
       searching_ = 0;
     }
 
@@ -282,11 +281,6 @@ class MemoryPool : private Uncopyable {
 
 
     RASP_INLINE MemoryPool::LocalArena* TlsAlloc();
-
-
-    static RASP_INLINE TlsKey GetTlsKey() RASP_NOEXCEPT {
-      return std::hash<std::thread::id>()(std::this_thread::get_id());
-    }
     
 
     inline void AppendArena(MemoryPool::LocalArena* arena);
@@ -316,7 +310,7 @@ class MemoryPool : private Uncopyable {
 
     Mmap* mmap_;
     SpinLock lock_;
-    Tls<MemoryPool::LocalArena*>* tls_;
+    ThreadLocalArenaPtr* tls_;
     
     static const int kSmallMax = 3 KB;
 
