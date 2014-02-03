@@ -34,7 +34,24 @@ class Mmap {
   class InternalMmap;
  public:
   inline Mmap();
+
+
   inline ~Mmap();
+
+
+  Mmap(Mmap&& mmap) {
+    std::swap(*this, mmap);
+    mmap.uncommited_.test_and_set();
+  }
+
+
+  Mmap& operator = (Mmap&& mmap) {
+    std::swap(*this, mmap);
+    mmap.uncommited_.test_and_set();
+    return *this;
+  }
+  
+  
   RASP_INLINE void* Commit(size_t size);
   RASP_INLINE void UnCommit();
   RASP_INLINE uint64_t commited_size() RASP_NO_SE;
@@ -122,6 +139,7 @@ class Mmap {
    private:
     Mmap* mmap_;
   };
+  
  private:
   InternalMmap* mmap_;
   std::atomic_flag uncommited_;

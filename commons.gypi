@@ -114,7 +114,8 @@
           # ... or that C implementations shouldn't use
           # POSIX names
           '_CRT_NONSTDC_NO_DEPRECATE',
-          'PLATFORM_WIN'
+          'PLATFORM_WIN',
+          'NOMINMAX'
         ],
       }],
       [ 'OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris"', {

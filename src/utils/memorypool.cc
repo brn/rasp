@@ -34,7 +34,7 @@ MemoryPool::MemoryPool(size_t size)
       current_dealloced_(nullptr),
       size_(size) {
   ASSERT(true, size <= kMaxAllocatableSize);
-  central_arena_ = new(allocator_.Commit(sizeof(CentralArena))) CentralArena(&allocator_);
+  central_arena_ = central_arena_once_init_(&allocator_);
   deleted_.clear();
 }
 
@@ -87,6 +87,8 @@ MemoryPool& MemoryPool::operator = (MemoryPool&& memory_pool) {
   dealloced_head_ = memory_pool.dealloced_head_;
   current_dealloced_ = memory_pool.current_dealloced_;
   size_ = memory_pool.size_;
+  allocator_ = std::move(memory_pool.allocator_);
+  memory_pool.deleted_.test_and_set();
   deleted_.clear();
   memory_pool.deleted_.test_and_set();
   memory_pool.central_arena_ = nullptr;

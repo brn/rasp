@@ -26,10 +26,12 @@
 #ifndef UTILS_UTILS_H_
 #define UTILS_UTILS_H_
 
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <sstream>
 #include <string>
+#include <new>
 #include "os.h"
 #include "../config.h"
 
@@ -75,7 +77,7 @@ RASP_INLINE void Assert__(bool ok, const char* result, const char* expect, const
 
 
 RASP_INLINE void Fatal__(const char* file, int line, const char* function, const std::string& message) {
-  FPrintf(stderr, "Fatal error occured, so process no longer exist.\nin file %s at line %d\n%s\n",
+  FPrintf(stderr, "Fatal error occured, so process no longer exist.\nin file %s at line %d\n%s\n%s\n",
           file, line, function, message.c_str());
   abort();
 }
@@ -173,6 +175,27 @@ template <typename T>
 RASP_INLINE size_t Strlen(const T* str) {
   return strlen(static_cast<const char*>(str));
 }
+
+
+template <typename T, bool kInitOnce = true>
+class LazyInitializer {
+ public:
+  LazyInitializer() {lock_.clear();}
+  ~LazyInitializer() {
+    reinterpret_cast<T*>(heap_)->~T();
+  }
+  
+  template <typename ... Args>
+  T* operator()(Args ... args) {
+    if (kInitOnce) {
+      RASP_CHECK(false, lock_.test_and_set());
+    }
+    return new(heap_) T(args...);
+  }
+ private:
+  std::atomic_flag lock_;
+  Byte heap_[sizeof(T)];
+};
 
 }
 

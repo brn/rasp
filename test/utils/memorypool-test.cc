@@ -31,7 +31,7 @@
 #include "../../src/utils/utils.h"
 
 static const uint64_t kSize = 1000000u;
-static const int kThreadSize = 34;//rasp::SystemInfo::GetOnlineProcessorCount();
+static const int kThreadSize = rasp::SystemInfo::GetOnlineProcessorCount();
 
 
 class MemoryPoolTest: public ::testing::Test {

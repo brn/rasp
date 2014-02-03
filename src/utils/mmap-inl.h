@@ -189,6 +189,7 @@ Mmap::~Mmap() {
   UnCommit();
 }
 
+
 uint64_t Mmap::commited_size() RASP_NO_SE {
   return mmap_->commited();
 }

@@ -182,10 +182,6 @@ MemoryPool::Chunk* MemoryPool::Chunk::New(size_t size, Mmap* allocator) {
   const size_t heap_size = RASP_ALIGN_OFFSET((kChunkSize + aligned_size), kAlignment);
 #endif
   Byte* ptr = reinterpret_cast<Byte*>(allocator->Commit(heap_size));
-  
-  if (ptr == NULL) {
-    throw std::bad_alloc();
-  }
 
 #if defined(DEBUG)
   // Verification bit.
@@ -194,6 +190,7 @@ MemoryPool::Chunk* MemoryPool::Chunk::New(size_t size, Mmap* allocator) {
   void* chunk_area = PtrAdd(ptr, kVerificationTagSize);
 #else
   void* chunk_area = ptr;
+  printf("%p\n", ptr);
 #endif
   
   // Instantiate Chunk from the memory block.
@@ -204,11 +201,6 @@ MemoryPool::Chunk* MemoryPool::Chunk::New(size_t size, Mmap* allocator) {
 void MemoryPool::Chunk::Delete(Chunk* chunk) RASP_NOEXCEPT {
   chunk->Destruct();
   chunk->~Chunk();
-#ifdef DEBUG
-  Byte* block = reinterpret_cast<Byte*>(chunk);
-  Byte* block_begin = block - kVerificationTagSize;
-  ASSERT(true, (*reinterpret_cast<VerificationTag*>(block_begin)) == kVerificationBit);
-#endif
 }
 
 

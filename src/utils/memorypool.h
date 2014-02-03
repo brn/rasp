@@ -127,8 +127,18 @@ class MemoryPool : private Uncopyable {
   ~MemoryPool() {Destroy();}
 
 
-  MemoryPool(MemoryPool&& memory_pool) {
-    std::swap(*this, memory_pool);
+  MemoryPool(MemoryPool&& memory_pool)
+      : allocator_(std::move(memory_pool.allocator_)),
+        central_arena_(memory_pool.central_arena_),
+        dealloced_head_(memory_pool.dealloced_head_),
+        current_dealloced_(memory_pool.current_dealloced_),
+        size_(memory_pool.size_) {
+    ASSERT(true, size_ <= kMaxAllocatableSize);
+    deleted_.clear();
+    memory_pool.deleted_.test_and_set();
+    memory_pool.central_arena_ = nullptr;
+    memory_pool.dealloced_head_ = nullptr;
+    memory_pool.current_dealloced_ = nullptr;
   }
   
 
@@ -442,9 +452,12 @@ class MemoryPool : private Uncopyable {
         : arena_head_(nullptr),
           arena_tail_(nullptr),
           mmap_(mmap) {
-      tls_ = new(mmap_->Commit(sizeof(ThreadLocalStorage::Slot))) ThreadLocalStorage::Slot(&TlsFree);
-      huge_chunk_allocator_ = new(mmap_->Commit(sizeof(HugeChunkAllocator))) HugeChunkAllocator(mmap_);
+      tls_ = tls_once_init_(&TlsFree);
+      huge_chunk_allocator_ = huge_chunk_allocator_once_init_(mmap_);
     }
+
+
+    ~CentralArena() = default;
 
 
     /**
@@ -521,10 +534,13 @@ class MemoryPool : private Uncopyable {
 
     Mmap* mmap_;
     HugeChunkAllocator* huge_chunk_allocator_;
+    LazyInitializer<HugeChunkAllocator> huge_chunk_allocator_once_init_;
     SpinLock lock_;
     SpinLock dealloc_lock_;
     SpinLock tree_lock_;
     ThreadLocalStorage::Slot* tls_;
+    LazyInitializer<ThreadLocalStorage::Slot> tls_once_init_;
+    
     
     static const int kSmallMax = 3 KB;
 
@@ -633,6 +649,7 @@ class MemoryPool : private Uncopyable {
 
   // The chunk list.
   CentralArena* central_arena_;
+  LazyInitializer<CentralArena> central_arena_once_init_;
 
 
   MemoryBlock* dealloced_head_;
