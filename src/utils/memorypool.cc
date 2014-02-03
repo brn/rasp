@@ -96,31 +96,14 @@ MemoryPool& MemoryPool::operator = (MemoryPool&& memory_pool) {
 }
 
 
-MemoryPool::MemoryBlock* MemoryPool::ChunkList::FindApproximateDeallocedBlock(size_t size) RASP_NOEXCEPT {
-  MemoryBlock* last = nullptr;
-  MemoryBlock* find = nullptr;
-  MemoryBlock* current = free_head_;
-  Size most = MemoryPool::kMaxAllocatableSize;
-  
-  while (find != nullptr) {
-    Size block_size = current->size();
-    if (block_size == size) {
-      EraseFromDeallocedList(current, last);
-      return current;
-    }
-    if (block_size >= size) {
-      Size s = block_size - size;
-      if (most > s) {
-        most = s;
-        find = current;
-      }
-    }
-  }
 
-  if (find != nullptr) {
-    EraseFromDeallocedList(find, last);
+MemoryPool::ChunkList* MemoryPool::LocalArena::InitHugeChunkList(int index) {
+  if (huge_chunk_map_.count(index) != 0) {
+    return huge_chunk_map_[index];
   }
-  return find;
+  ChunkList* new_chunk_list = new(mmap_->Commit(sizeof(ChunkList))) ChunkList();
+  huge_chunk_map_[index] = new_chunk_list;
+  return new_chunk_list;
 }
 
 
@@ -129,19 +112,27 @@ void MemoryPool::CentralArena::Destroy() {
   while (arena != nullptr) {
     for (int i = 0; i < kMaxSmallObjectsCount; i++) {
       auto chunk_list = arena->chunk_list(i);
-      if (chunk_list->head() != nullptr) {
-        auto chunk = chunk_list->head();
-        while (chunk != nullptr) {
-          ASSERT(true, chunk != nullptr);
-          auto tmp = chunk;
-          chunk = chunk->next();
-          Chunk::Delete(tmp);
-        }
+      IterateChunkList(chunk_list);
+      for (auto c: *(arena->huge_chunk_map())) {
+        IterateChunkList(c.second);
       }
     }
     arena = arena->next();
   }
   tls_->~Slot();
+}
+
+
+void MemoryPool::CentralArena::IterateChunkList(MemoryPool::ChunkList* chunk_list) {
+  if (chunk_list->head() != nullptr) {
+    auto chunk = chunk_list->head();
+    while (chunk != nullptr) {
+      ASSERT(true, chunk != nullptr);
+      auto tmp = chunk;
+      chunk = chunk->next();
+      Chunk::Delete(tmp);
+    }
+  }
 }
 
 

@@ -268,14 +268,8 @@ inline MemoryPool::MemoryBlock* MemoryPool::CentralArena::Commit(size_t size, si
   ChunkList* chunk_list = InitChunk(size, default_size, index);
 
   if (chunk_list->free_head() != nullptr) {
-    if (index != 0) {
-      return chunk_list->SwapFreeHead();
-    }
-    
-    MemoryBlock* block = chunk_list->FindApproximateDeallocedBlock(size);
-    if (block != nullptr) {
-      return block;
-    }
+    RASP_CHECK(true, index <= kMaxSmallObjectsCount);
+    return chunk_list->SwapFreeHead();
   }
   
   return chunk_list->current()->GetBlock(size);
@@ -290,11 +284,7 @@ void MemoryPool::CentralArena::FreeArena(MemoryPool::LocalArena* arena) {
 
 inline int MemoryPool::CentralArena::FindBestFitBlockIndex(size_t size) {
   RASP_CHECK(true, size > 0);
-  int index = (size / kAlignment);
-  if (index <= kMaxSmallObjectsCount) {
-    return index;
-  }
-  return 0;
+  return (size / kAlignment);
 }
 
 
@@ -330,7 +320,7 @@ MemoryPool::LocalArena* MemoryPool::CentralArena::TlsAlloc() {
     arena = reinterpret_cast<LocalArena*>(tls_->Get());
     if (arena == nullptr) {
       void* block = mmap_->Commit(sizeof(LocalArena));
-      arena = new(block) LocalArena(this, mmap_);
+      arena = new(block) LocalArena(this, mmap_, huge_chunk_allocator_);
       arena->AcquireLock();
       StoreNewLocalArena(arena);
       tls_->Set(arena);
@@ -355,9 +345,11 @@ void MemoryPool::CentralArena::StoreNewLocalArena(MemoryPool::LocalArena* arena)
 
 
 // LocalArena inline begin
-MemoryPool::LocalArena::LocalArena(MemoryPool::CentralArena* central_arena, Mmap* mmap)
+MemoryPool::LocalArena::LocalArena(
+    MemoryPool::CentralArena* central_arena, Mmap* mmap, HugeChunkAllocator* huge_chunk_allocator)
     : central_arena_(central_arena),
       mmap_(mmap),
+      huge_chunk_map_(*huge_chunk_allocator),
       next_(nullptr) {
   lock_.clear();
   classed_chunk_list_ = reinterpret_cast<ChunkList*>(mmap_->Commit(sizeof(ChunkList) * (kMaxSmallObjectsCount + 1)));

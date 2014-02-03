@@ -113,6 +113,8 @@ class MemoryPool : private Uncopyable {
  private:
   class Chunk;
   struct MemoryBlock;
+  class ChunkList;
+  typedef Mmap::MmapStandardAllocator<std::pair<const size_t, MemoryPool::ChunkList*>> HugeChunkAllocator;
   
  public :
   /**
@@ -391,13 +393,6 @@ class MemoryPool : private Uncopyable {
      * @param block Dealloced memory block.
      */
     inline void AppendFreeList(MemoryPool::MemoryBlock* block) RASP_NOEXCEPT;
-      
-
-    /**
-     * Find the most nearly size block from free list if size class is 0.
-     * @param size Need
-     */
-    MemoryPool::MemoryBlock* FindApproximateDeallocedBlock(size_t size) RASP_NOEXCEPT;
 
 
     /**
@@ -448,6 +443,7 @@ class MemoryPool : private Uncopyable {
           arena_tail_(nullptr),
           mmap_(mmap) {
       tls_ = new(mmap_->Commit(sizeof(ThreadLocalStorage::Slot))) ThreadLocalStorage::Slot(&TlsFree);
+      huge_chunk_allocator_ = new(mmap_->Commit(sizeof(HugeChunkAllocator))) HugeChunkAllocator(mmap_);
     }
 
 
@@ -515,12 +511,16 @@ class MemoryPool : private Uncopyable {
      * @param arena The arena which want to connect.
      */
     inline void StoreNewLocalArena(MemoryPool::LocalArena* arena);
+
+
+    void IterateChunkList(MemoryPool::ChunkList*);
     
 
     LocalArena* arena_head_;
     LocalArena* arena_tail_;
 
     Mmap* mmap_;
+    HugeChunkAllocator* huge_chunk_allocator_;
     SpinLock lock_;
     SpinLock dealloc_lock_;
     SpinLock tree_lock_;
@@ -538,13 +538,17 @@ class MemoryPool : private Uncopyable {
    * The thread local arena.
    */
   class LocalArena {
+    typedef std::unordered_map<size_t, MemoryPool::ChunkList*,
+                               std::hash<size_t>,
+                               std::equal_to<size_t>,
+                               HugeChunkAllocator> HugeChunkMap;
    public:
     /**
      * Constructor
      * @param central_arena The central arena.
      * @param mmap Allocator
      */
-    inline LocalArena(CentralArena* central_arena, Mmap* mmap);
+    inline LocalArena(CentralArena* central_arena, Mmap* mmap, HugeChunkAllocator* huge_chunk_allocator);
     inline ~LocalArena();
 
 
@@ -587,8 +591,30 @@ class MemoryPool : private Uncopyable {
      * @return Specific class chunk list.
      */
     RASP_INLINE ChunkList* chunk_list(int index) {
-      return classed_chunk_list_ + index;
+      if (index <= kMaxSmallObjectsCount) {
+        return classed_chunk_list_ + index;
+      } else {
+        return InitHugeChunkList(index);
+      }
     }
+
+
+    /**
+     * Return huge chunk map.
+     */
+    RASP_INLINE HugeChunkMap* huge_chunk_map() RASP_NOEXCEPT {
+      return &huge_chunk_map_;
+    }
+
+
+    /**
+     * Find the most nearly size block from free list if size class is 0.
+     * @param size Need
+     */
+    MemoryPool::MemoryBlock* FindFreeBlockFromHugeMap(int index) RASP_NOEXCEPT;
+
+
+    ChunkList* InitHugeChunkList(int index);
 
 
     /**
@@ -600,6 +626,7 @@ class MemoryPool : private Uncopyable {
     std::atomic_flag lock_;
     Mmap* mmap_;
     ChunkList* classed_chunk_list_;
+    HugeChunkMap huge_chunk_map_;
     LocalArena* next_;
   };
   
@@ -615,7 +642,6 @@ class MemoryPool : private Uncopyable {
   size_t size_;
   std::atomic_flag deleted_;
   SpinLock tree_lock_;
-  
   Mmap allocator_;
 
 #ifdef PLATFORM_64BIT
