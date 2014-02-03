@@ -34,16 +34,18 @@
 
 #if defined(HAVE_MMAP)
 #include "mmap-mmap.h"
+namespace {
+static const size_t kDefaultByte = RASP_ALIGN_OFFSET((100 KB), rasp::SystemInfo::GetPageSize());
+}
 #elif defined(HAVE_VIRTUALALLOC)
 #include "mmap-virtual-alloc.h"
+namespace {
+static const size_t kDefaultByte = RASP_ALIGN_OFFSET((10 KB), rasp::SystemInfo::GetPageSize());
+}
 #endif
 
 
 namespace rasp {
-
-namespace {
-static const size_t kDefaultByte = RASP_ALIGN_OFFSET((10 KB), SystemInfo::GetPageSize());
-}
   
 class Mmap::InternalMmap {
  private:

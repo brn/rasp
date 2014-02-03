@@ -98,7 +98,7 @@ RASP_INLINE void Fatal__(const char* file, int line, const char* function, const
 
 #define FATAL(msg) {std::stringstream err_stream__;err_stream__ << msg;Fatal__(__FILE__, __LINE__, __PRETTY_FUNCTION__, err_stream__.str());}
 
-
+#define UNREACHABLE FATAL("UNREACHABLE CODE ACCESSED.")
 
 
 typedef uint8_t Byte;

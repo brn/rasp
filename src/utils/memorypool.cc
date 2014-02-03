@@ -28,6 +28,42 @@
 namespace rasp {
 
 
+//MemoryPool constructor.
+MemoryPool::MemoryPool(size_t size)
+    : dealloced_head_(nullptr),
+      current_dealloced_(nullptr),
+      size_(size) {
+  ASSERT(true, size <= kMaxAllocatableSize);
+  central_arena_ = new(allocator_.Commit(sizeof(CentralArena))) CentralArena(&allocator_);
+  deleted_.clear();
+}
+
+
+// Get heap from the pool.
+// The heap structure is bellow
+// |1-BIT SENTINEL-FLAG|1-BIT Allocatable FLAG|14-BIT SIZE BIT|FREE-MEMORY|
+// This method return FREE-MEMORY area.
+rasp::MemoryPool::MemoryBlock* MemoryPool::Chunk::GetBlock(size_t reserve) RASP_NOEXCEPT  {
+  ASSERT(true, HasEnoughSize(reserve));
+  
+  Byte* ret = block_ + used_;
+  
+  if (tail_block_ != nullptr) {
+    reinterpret_cast<MemoryBlock*>(tail_block_)->set_next_ptr(ret);
+  }
+  
+  size_t reserved_size = RASP_ALIGN_OFFSET((kValueOffset + reserve), kAlignment);
+  size_t real_size = reserve + (reserved_size - (kValueOffset + reserve));
+  used_ += reserved_size;
+  tail_block_ = ret;
+  
+  MemoryBlock* memory_block = reinterpret_cast<MemoryBlock*>(ret);
+  memory_block->set_size(real_size);
+  memory_block->set_next_ptr(nullptr);
+  return memory_block;
+}
+
+
 void MemoryPool::Chunk::Destruct() {
   if (0u == used_ || tail_block_ == nullptr) {
     return;
@@ -36,7 +72,7 @@ void MemoryPool::Chunk::Destruct() {
   while (1) {
     bool exit = IsTail(memory_block->ToBegin());
     if (!memory_block->IsMarkedAsDealloced()) {
-      memory_block->ToValue()->~Poolable();
+      DestructMemoryBlock(memory_block);
     }
     if (exit) {
       break;
@@ -60,8 +96,36 @@ MemoryPool& MemoryPool::operator = (MemoryPool&& memory_pool) {
 }
 
 
+MemoryPool::MemoryBlock* MemoryPool::ChunkList::FindApproximateDeallocedBlock(size_t size) RASP_NOEXCEPT {
+  MemoryBlock* last = nullptr;
+  MemoryBlock* find = nullptr;
+  MemoryBlock* current = free_head_;
+  Size most = MemoryPool::kMaxAllocatableSize;
+  
+  while (find != nullptr) {
+    Size block_size = current->size();
+    if (block_size == size) {
+      EraseFromDeallocedList(current, last);
+      return current;
+    }
+    if (block_size >= size) {
+      Size s = block_size - size;
+      if (most > s) {
+        most = s;
+        find = current;
+      }
+    }
+  }
+
+  if (find != nullptr) {
+    EraseFromDeallocedList(find, last);
+  }
+  return find;
+}
+
+
 void MemoryPool::CentralArena::Destroy() {
-  LocalArena* arena = arena_head_.load(std::memory_order_relaxed);
+  LocalArena* arena = arena_head_;
   while (arena != nullptr) {
     for (int i = 0; i < kMaxSmallObjectsCount; i++) {
       auto chunk_list = arena->chunk_list(i);
@@ -88,7 +152,7 @@ void MemoryPool::CentralArena::Dealloc(void* object) {
   MemoryPool::MemoryBlock* memory_block = reinterpret_cast<MemoryPool::MemoryBlock*>(block);
 
   RASP_CHECK(true, !memory_block->IsMarkedAsDealloced());
-  memory_block->ToValue()->~Poolable();
+  DestructMemoryBlock(memory_block);
   memory_block->MarkAsDealloced();
   ASSERT(true, memory_block->IsMarkedAsDealloced());
   int index = FindBestFitBlockIndex(memory_block->size());

@@ -15,8 +15,7 @@ namespace rasp {
 // Chromium consumers.
 
 // g_native_tls_key is the one native TLS that we use.  It stores our table.
-std::atomic_uint_fast16_t g_native_tls_key =
-    PlatformThreadLocalStorage::TLS_KEY_OUT_OF_INDEXES;
+std::atomic_uint_fast32_t g_native_tls_key(PlatformThreadLocalStorage::TLS_KEY_OUT_OF_INDEXES);
 
 // g_last_used_tls_key is the high-water-mark of allocated thread local storage.
 // Each allocation is an index into our g_tls_destructors[].  Each such index is
@@ -25,7 +24,7 @@ std::atomic_uint_fast16_t g_native_tls_key =
 // instance of ThreadLocalStorage::Slot has been freed (i.e., destructor called,
 // etc.).  This reserved use of 0 is then stated as the initial value of
 // g_last_used_tls_key, so that the first issued index will be 1.
-std::atomic_uint_fast32_t g_last_used_tls_key = 0;
+std::atomic_uint_fast32_t g_last_used_tls_key(0);
 
 // The maximum number of 'slots' in our thread local storage stack.
 const int kThreadLocalStorageSize = 64;
@@ -69,7 +68,7 @@ void** ConstructTlsVector() {
       PlatformThreadLocalStorage::FreeTLS(tmp);
     }
 
-    uint_fast16_t out_of_index = PlatformThreadLocalStorage::TLS_KEY_OUT_OF_INDEXES;
+    uint_fast32_t out_of_index = PlatformThreadLocalStorage::TLS_KEY_OUT_OF_INDEXES;
     // Atomically test-and-set the tls_key.  If the key is
     // TLS_KEY_OUT_OF_INDEXES, go ahead and set it.  Otherwise, do nothing, as
     // another thread already did our dirty work.
@@ -134,7 +133,7 @@ void OnThreadExitInternal(void* value) {
     // allocator) and should also be destroyed last.  If we get the order wrong,
     // then we'll itterate several more times, so it is really not that
     // critical (but it might help).
-    std::atomic_uint_fast32_t last_used_tls_key = g_last_used_tls_key.load(std::memory_order_relaxed);
+    std::atomic_uint_fast32_t last_used_tls_key(g_last_used_tls_key.load(std::memory_order_relaxed));
     for (int slot = last_used_tls_key; slot > 0; --slot) {
       void* value = stack_allocated_tls_data[slot];
       if (value == nullptr)

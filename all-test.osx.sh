@@ -1,6 +1,6 @@
 type=${1:-Debug}
 sh osx_build.sh ${type} &&\
-build/${type}/SourceStreamTest &&\
-build/${type}/UnicodeIteratorAdapterTest &&\
-build/${type}/ScannerTest &&\
-build/${type}/MemoryPoolTest
+build/${type}/SourceStreamTest --gtest_color=auto&&\
+build/${type}/UnicodeIteratorAdapterTest --gtest_color=auto &&\
+build/${type}/ScannerTest --gtest_color=auto &&\
+build/${type}/MemoryPoolTest --gtest_color=auto

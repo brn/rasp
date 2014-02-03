@@ -157,7 +157,7 @@ class ThreadLocalStorage : private Uncopyable {
 #if defined(PLATFORM_WIN)
 #include "tls-win-inl.h"
 #elif defined(PLATFORM_POSIX)
-#include "tls-win-posix.h"
+#include "tls-posix-inl.h"
 #endif
 
 #endif  // UTILS_TLS_H_

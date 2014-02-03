@@ -28,9 +28,19 @@
 #include <memory>
 #include "../../src/utils/memorypool.h"
 #include "../../src/utils/systeminfo.h"
+#include "../../src/utils/utils.h"
 
 static const uint64_t kSize = 1000000u;
-static const int kThreadSize = rasp::SystemInfo::GetOnlineProcessorCount();
+static const int kThreadSize = 34;//rasp::SystemInfo::GetOnlineProcessorCount();
+
+
+class MemoryPoolTest: public ::testing::Test {
+ public:
+  static void SetUpTestCase() {
+    rasp::Printf("[TEST CONFIG] DefaultObjectCreationCount %llu.\n", kSize);
+    rasp::Printf("[TEST CONFIG] DefaultThreadCount %d.\n", kThreadSize);
+  }
+};
 
 
 class Test0 {
@@ -103,7 +113,7 @@ class Array : public rasp::Poolable {
 };
 
 
-TEST(MemoryPoolTest, MemoryPoolTest_allocate_from_chunk) {
+TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_from_chunk) {
   uint64_t ok = 0u;
   rasp::MemoryPool p(1024);
   new(&p) Test1(&ok);
@@ -112,7 +122,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_from_chunk) {
 }
 
 
-TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk) {
+TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk) {
   rasp::MemoryPool p(1024);
   uint64_t ok = 0u;
   for (uint64_t i = 0u; i < kSize; i++) {
@@ -123,7 +133,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk) {
 }
 
 
-TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_random) {
+TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_random) {
   uint64_t ok = 0u;
   std::random_device rd;
 	std::mt19937 mt(rd());
@@ -146,7 +156,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_random) {
 }
 
 
-TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_and_dealloc2) {
+TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_and_dealloc2) {
   uint64_t ok = 0u;
   std::random_device rd;
 	std::mt19937 mt(rd());
@@ -178,7 +188,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_and_dealloc2) {
 }
 
 
-TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_and_dealloc) {
+TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_and_dealloc) {
   uint64_t ok = 0u;
   rasp::MemoryPool p(1024);
   for (uint64_t i = 0u; i < kSize; i++) {
@@ -190,7 +200,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_and_dealloc) {
 }
 
 
-TEST(MemoryPoolTest, MemoryPoolTest_allocate_big_object) {
+TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_big_object) {
   uint64_t ok = 0u;
   rasp::MemoryPool p(8);
   new(&p) LargeObject(&ok);
@@ -199,7 +209,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_big_object) {
 }
 
 
-TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_big_object) {
+TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_many_big_object) {
   uint64_t ok = 0u;
   rasp::MemoryPool p(8);
   for (uint64_t i = 0u; i < kSize; i++) {
@@ -210,7 +220,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_allocate_many_big_object) {
 }
 
 
-TEST(MemoryPoolTest, MemoryPoolTest_performance1) {
+TEST_F(MemoryPoolTest, MemoryPoolTest_performance1) {
   rasp::MemoryPool p(1024);
   uint64_t ok = 0u;
   for (uint64_t i = 0u; i < kSize; i++) {
@@ -221,7 +231,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_performance1) {
 }
 
 
-TEST(MemoryPoolTest, MemoryPoolTest_performance2) {
+TEST_F(MemoryPoolTest, MemoryPoolTest_performance2) {
   uint64_t ok = 0u;
   {
     std::vector<std::shared_ptr<Test0>> list(kSize);
@@ -233,7 +243,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_performance2) {
 }
 
 
-TEST(MemoryPoolTest, MemoryPoolTest_performance3) {
+TEST_F(MemoryPoolTest, MemoryPoolTest_performance3) {
   uint64_t ok = 0u;
   std::vector<Test0*> list(kSize);
   for (uint64_t i = 0u; i < kSize; i++) {
@@ -246,7 +256,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_performance3) {
 }
 
 
-TEST(MemoryPoolTest, MemoryPoolTest_thread) {
+TEST_F(MemoryPoolTest, MemoryPoolTest_thread) {
   static const int kSize = 10000;  
   uint64_t ok = 0u;
   rasp::MemoryPool p(1024);
@@ -277,7 +287,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_thread) {
 }
 
 
-TEST(MemoryPoolTest, MemoryPoolTest_thread_random) {
+TEST_F(MemoryPoolTest, MemoryPoolTest_thread_random) {
   static const int kSize = 10000;
   uint64_t ok = 0u;
   rasp::MemoryPool p(1024);
@@ -320,7 +330,7 @@ TEST(MemoryPoolTest, MemoryPoolTest_thread_random) {
 }
 
 
-TEST(MemoryPoolTest, MemoryPoolTest_thread_random_dealloc) {
+TEST_F(MemoryPoolTest, MemoryPoolTest_thread_random_dealloc) {
   static const int kSize = 10000;
   uint64_t ok = 0u;
   rasp::MemoryPool p(1024);

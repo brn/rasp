@@ -52,7 +52,7 @@ void SystemInfo::Initialize() {
 }
 
 
-std::atomic<bool> SystemInfo::initialized_ = false;
+std::atomic<bool> SystemInfo::initialized_(false);
 SystemInfoPlatform* SystemInfo::system_info_platform_ = nullptr;
 
 

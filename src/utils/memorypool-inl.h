@@ -92,6 +92,17 @@ struct MemoryPool::MemoryBlock {
   }
 
 
+  RASP_INLINE void MarkAsArray() RASP_NOEXCEPT {
+    Byte* p = reinterpret_cast<Byte*>(ToBegin() + kValueOffset);
+    *p |= kArrayBit;
+  }
+
+
+  RASP_INLINE bool IsMarkedAsArray() RASP_NOEXCEPT {
+    return (*reinterpret_cast<Byte*>(ToBegin() + kValueOffset) & kArrayBit) == kArrayBit;
+  }
+
+
   RASP_INLINE Byte* ToBegin() RASP_NOEXCEPT {
     return reinterpret_cast<Byte*>(this);
   }
@@ -104,21 +115,7 @@ inline void* Poolable::operator new(size_t size, MemoryPool* pool) {
 
 
 inline void* Poolable::operator new[](size_t size, MemoryPool* pool) {
-  return pool->Allocate(size);
-}
-
-
-inline void Poolable::operator delete(void* object, MemoryPool* pool) {}
-
-
-//MemoryPool constructor.
-inline MemoryPool::MemoryPool(size_t size)
-    : dealloced_head_(nullptr),
-      current_dealloced_(nullptr),
-      size_(size) {
-  ASSERT(true, size <= kMaxAllocatableSize);
-  central_arena_ = new(allocator_.Commit(sizeof(CentralArena))) CentralArena(&allocator_);
-  deleted_.clear();
+  return pool->AllocateArray(size);
 }
 
 
@@ -135,12 +132,28 @@ void MemoryPool::Dealloc(void* object) RASP_NOEXCEPT {
 }
 
 
-RASP_INLINE void* MemoryPool::Allocate(size_t size) {
-  return DistributeBlock(size);
+void* MemoryPool::Allocate(size_t size) {
+  return DistributeBlock(size)->ToValue<void>();
 }
 
 
-inline void* MemoryPool::DistributeBlock(size_t size) {
+void* MemoryPool::AllocateArray(size_t size) {
+  MemoryBlock* block = DistributeBlock(size);
+  block->MarkAsArray();
+  return block->ToValue<void>();
+}
+
+
+void MemoryPool::DestructMemoryBlock(MemoryPool::MemoryBlock* memory_block) {
+  if (!memory_block->IsMarkedAsArray()) {
+    memory_block->ToValue()->~Poolable();
+  } else {
+    delete[] memory_block->ToValue();
+  }
+}
+
+
+MemoryPool::MemoryBlock* MemoryPool::DistributeBlock(size_t size) {
   const size_t kPoolableSize = sizeof(Poolable);
   MemoryBlock* block = central_arena_->Commit(size, size_);
     
@@ -148,7 +161,7 @@ inline void* MemoryPool::DistributeBlock(size_t size) {
     size = kPoolableSize;
   }
   
-  return block->ToValue<void>();
+  return block;
 }
 
 
@@ -156,7 +169,7 @@ inline void* MemoryPool::DistributeBlock(size_t size) {
 // Chunk and heap block is create from one big memory block.
 // The structure is below
 // |8-BIT VERIFY BIT|Chunk MEMORY BLOCK|The memory block managed BY Chunk|
-inline MemoryPool::Chunk* MemoryPool::Chunk::New(size_t size, Mmap* allocator) {
+MemoryPool::Chunk* MemoryPool::Chunk::New(size_t size, Mmap* allocator) {
   ASSERT(true, size <= kMaxAllocatableSize);
   static const size_t kChunkSize = sizeof(Chunk);
   const size_t aligned_size = RASP_ALIGN_OFFSET(size, kAlignment);
@@ -188,8 +201,7 @@ inline MemoryPool::Chunk* MemoryPool::Chunk::New(size_t size, Mmap* allocator) {
 }
 
 
-
-inline void MemoryPool::Chunk::Delete(Chunk* chunk) RASP_NOEXCEPT {
+void MemoryPool::Chunk::Delete(Chunk* chunk) RASP_NOEXCEPT {
   chunk->Destruct();
   chunk->~Chunk();
 #ifdef DEBUG
@@ -200,39 +212,14 @@ inline void MemoryPool::Chunk::Delete(Chunk* chunk) RASP_NOEXCEPT {
 }
 
 
-RASP_INLINE bool MemoryPool::Chunk::HasEnoughSize(size_t needs) RASP_NO_SE {
+bool MemoryPool::Chunk::HasEnoughSize(size_t needs) RASP_NO_SE {
   return block_size_ >= used_ + (RASP_ALIGN_OFFSET((kValueOffset + needs), kAlignment));
-}
-
-
-// Get heap from the pool.
-// The heap structure is bellow
-// |1-BIT SENTINEL-FLAG|1-BIT Allocatable FLAG|14-BIT SIZE BIT|FREE-MEMORY|
-// This method return FREE-MEMORY area.
-inline rasp::MemoryPool::MemoryBlock* MemoryPool::Chunk::GetBlock(size_t reserve) RASP_NOEXCEPT  {
-  ASSERT(true, HasEnoughSize(reserve));
-  
-  Byte* ret = block_ + used_;
-  
-  if (tail_block_ != nullptr) {
-    reinterpret_cast<MemoryBlock*>(tail_block_)->set_next_ptr(ret);
-  }
-  
-  size_t reserved_size = RASP_ALIGN_OFFSET((kValueOffset + reserve), kAlignment);
-  size_t real_size = reserve + (reserved_size - (kValueOffset + reserve));
-  used_ += reserved_size;
-  tail_block_ = ret;
-  
-  MemoryBlock* memory_block = reinterpret_cast<MemoryBlock*>(ret);
-  memory_block->set_size(real_size);
-  memory_block->set_next_ptr(nullptr);
-  return memory_block;
 }
 // Chunk inline end
 
 
 // ChunkList inline begin
-inline void MemoryPool::ChunkList::AppendFreeList(MemoryPool::MemoryBlock* block) RASP_NOEXCEPT {
+void MemoryPool::ChunkList::AppendFreeList(MemoryPool::MemoryBlock* block) RASP_NOEXCEPT {
   if (free_head_ == nullptr) {
     free_head_ = current_free_ = block;
   } else {
@@ -240,34 +227,6 @@ inline void MemoryPool::ChunkList::AppendFreeList(MemoryPool::MemoryBlock* block
     current_free_ = block;
     block->set_next_ptr(nullptr);
   }
-}
-
-
-inline MemoryPool::MemoryBlock* MemoryPool::ChunkList::FindApproximateDeallocedBlock(size_t size) RASP_NOEXCEPT {
-  MemoryBlock* last = nullptr;
-  MemoryBlock* find = nullptr;
-  MemoryBlock* current = free_head_;
-  Size most = MemoryPool::kMaxAllocatableSize;
-  
-  while (find != nullptr) {
-    Size block_size = current->size();
-    if (block_size == size) {
-      EraseFromDeallocedList(current, last);
-      return current;
-    }
-    if (block_size >= size) {
-      Size s = block_size - size;
-      if (most > s) {
-        most = s;
-        find = current;
-      }
-    }
-  }
-
-  if (find != nullptr) {
-    EraseFromDeallocedList(find, last);
-  }
-  return find;
 }
 
 
@@ -340,7 +299,7 @@ inline int MemoryPool::CentralArena::FindBestFitBlockIndex(size_t size) {
 
 
 MemoryPool::LocalArena* MemoryPool::CentralArena::FindUnlockedArena() {
-  LocalArena* arena = arena_head_.load(std::memory_order_relaxed);
+  LocalArena* arena = arena_head_;
   while (arena != nullptr) {
     if (arena->AcquireLock()) {
       //std::cout << "AcquireLock addr: "  << arena << " thread: " << std::this_thread::get_id() << std::endl;
@@ -363,7 +322,7 @@ inline MemoryPool::ChunkList* MemoryPool::CentralArena::InitChunk(
 
 MemoryPool::LocalArena* MemoryPool::CentralArena::TlsAlloc() {
   LocalArena* arena = nullptr;
-  if (arena_head_.load(std::memory_order_acquire) != nullptr) {
+  if (arena_head_ != nullptr) {
     arena = FindUnlockedArena();
   }
 
@@ -384,13 +343,12 @@ MemoryPool::LocalArena* MemoryPool::CentralArena::TlsAlloc() {
 
 
 void MemoryPool::CentralArena::StoreNewLocalArena(MemoryPool::LocalArena* arena) {
-  LocalArena* null1 = nullptr;
-  LocalArena* null2 = nullptr;
-  bool head = !arena_head_.compare_exchange_weak(null1, arena);
-  bool tail = !arena_tail_.compare_exchange_weak(null2, arena_head_.load(std::memory_order_relaxed));
-  if (head && tail) {
-    arena_tail_.load()->set_next(arena);
-    arena_tail_.store(arena);
+  ScopedSpinLock lock(tree_lock_);
+  if (arena_head_ == nullptr) {
+    arena_head_ = arena_tail_ = arena;
+  } else {
+    arena_tail_->set_next(arena);
+    arena_tail_ = arena;
   }
 }
 // CentralArena inline end

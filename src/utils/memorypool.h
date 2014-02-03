@@ -43,26 +43,82 @@ namespace rasp {
 
 class MemoryPool;
 
+
+/**
+ * Base class of the MemoryPool allocatable object.
+ */
 class Poolable {
  public:
+  /**
+   * Create object from MemoryPool allocated memory.
+   * The object created by this operator new must not delete or free.
+   * If you want to delete object call MemoryPool::Dealloc(void*).
+   */
   inline void* operator new (size_t size, MemoryPool* pool);
+
+
+  /**
+   * Create array of object from MemoryPool allocated memory.
+   * The object created by this operator new must not delete or free.
+   * If you want to delete object call MemoryPool::Dealloc(void*).
+   */
   inline void* operator new[] (size_t size, MemoryPool* pool);
-  inline void operator delete (void* ptr){};
+
+
+  /**
+   * DO NOT USE.
+   */
+  inline void operator delete (void* ptr){UNREACHABLE;};
+
+
+  /**
+   * Used internally.
+   */
   inline void operator delete[] (void* ptr){};
-  inline void operator delete (void* ptr, MemoryPool* pool);
-  inline void operator delete[] (void* ptr, MemoryPool* pool);
+
+
+  /**
+   * Called auto by system if operator new(void*, MemoryPool*) failed.
+   */
+  inline void operator delete (void* ptr, MemoryPool* pool){};
+
+  
+  /**
+   * Called auto by system if operator new[](void*, MemoryPool*) failed.
+   */
+  inline void operator delete[] (void* ptr, MemoryPool* pool){};
   virtual ~Poolable() {}
 };
 
 
-
+/**
+ * Fast thread safe memory allocator.
+ * All memory allocateded from heap(mmap/VirtualAlloc).
+ * This memory pool allocate object and array which public extends rasp::Poolable,
+ * and all allocated object is dealloced by destructor, but if you want,
+ * call MemoryPool::Dealloc(void*) explicitly.
+ *
+ * @example
+ * rasp::MemoryPool p(1024);
+ * PoolableExtendClass* poolable = new(&p) PoolableExtendClass();
+ * // something special.
+ * p.Destroy();
+ * // If do not call MemoryPool::Destroy(void),
+ * // that called in MemoryPool destructor.
+ */
 class MemoryPool : private Uncopyable {
+  // Only Poolable derived class can call
+  // MemoryPool::Allocate(size_t) or MemoryPool::AllocateArray(size_t).
   friend class Poolable;
  private:
   class Chunk;
   struct MemoryBlock;
   
  public :
+  /**
+   * Constructor
+   * @param size The hint of each chunk size.
+   */
   explicit MemoryPool(size_t size = 512);
 
   
@@ -87,36 +143,60 @@ class MemoryPool : private Uncopyable {
    * Free the specified pointer.
    * This function in fact not release memory.
    * This method add memory block to the free list and call destructor.
-   * @param object The object pointer that is allocated by MemoryPool::Allocate[Array].
+   * @param object The object pointer that must be allocated by MemoryPool::Allocate[Array].
    */
   RASP_INLINE void Dealloc(void* object) RASP_NOEXCEPT;
 
 
+  /**
+   * Get current allocated size by byte.
+   * @return The byte expression.
+   */
   RASP_INLINE double commited_bytes() RASP_NO_SE {
     return static_cast<double>(allocator_.commited_size());
   }
 
 
+  /**
+   * Get current allocated size by kilo byte.
+   * @return The kilo byte expression.
+   */
   RASP_INLINE double commited_kbytes() RASP_NO_SE {
     return static_cast<double>(allocator_.commited_size()) / 1024;
   }
 
 
+  /**
+   * Get current allocated size by mega byte.
+   * @return The mega byte expression.
+   */
   RASP_INLINE double commited_mbytes() RASP_NO_SE {
     return static_cast<double>(allocator_.commited_size()) / 1024 / 1024;
   }
 
 
+  /**
+   * Get current allocated heap size which include all unused space.
+   * @return The byte expression.
+   */
   RASP_INLINE double real_commited_bytes() RASP_NO_SE {
     return static_cast<double>(allocator_.real_commited_size());
   }
 
 
+  /**
+   * Get current allocated heap size which include all unused space.
+   * @return The kilo byte expression.
+   */
   RASP_INLINE double real_commited_kbytes() RASP_NO_SE {
     return static_cast<double>(allocator_.real_commited_size()) / 1024;
   }
 
 
+  /**
+   * Get current allocated heap size which include all unused space.
+   * @return The mega byte expression.
+   */
   RASP_INLINE double real_commited_mbytes() RASP_NO_SE {
     return static_cast<double>(allocator_.real_commited_size()) / 1024 / 1024;
   }
@@ -125,21 +205,43 @@ class MemoryPool : private Uncopyable {
 
 
   /**
-   * Create an instance from the reserved memory block.
-   * @return Specified class instance.
+   * Return enough size memory block for specified size.
+   * @return Unused memory block.
    */
   RASP_INLINE void* Allocate(size_t size);
 
-  
+
+  /**
+   * Return enough size memory block for specified size.
+   * @return Unused memory block.
+   */
+  RASP_INLINE void* AllocateArray(size_t size);
+
+
+  /**
+   * Advance pointer position
+   */
   template <typename T>
   RASP_INLINE static void* PtrAdd(T* ptr, size_t size) {
     return reinterpret_cast<void*>(reinterpret_cast<Byte*>(ptr) + size);
   }
 
 
-  inline void* DistributeBlock(size_t size);
+  /**
+   * Destruct Poolable class instance by the proper method.
+   */
+  RASP_INLINE static void DestructMemoryBlock(MemoryPool::MemoryBlock* memory_block);
 
-  
+
+  /**
+   * Allocate unused memory space from chunk.
+   */
+  inline MemoryPool::MemoryBlock* DistributeBlock(size_t size);
+
+
+  /**
+   * The memory block representation class.
+   */
   class Chunk {
    public:
     typedef uint8_t VerificationTag;
@@ -159,7 +261,12 @@ class MemoryPool : private Uncopyable {
      */
     inline static void Delete(Chunk* chunk) RASP_NOEXCEPT;
     
-  
+
+    /**
+     * Constructor
+     * @param block Unused block allocated by Mmap.
+     * @param size block size.
+     */
     Chunk(Byte* block, size_t size)
         : block_size_(size),
           used_(0u),
@@ -171,6 +278,9 @@ class MemoryPool : private Uncopyable {
     ~Chunk() = default;
 
 
+    /**
+     * Remove all chunks.
+     */
     void Destruct();
   
 
@@ -190,25 +300,43 @@ class MemoryPool : private Uncopyable {
      * @param needed size.
      * @returns aligned memory chunk.
      */
-    inline MemoryBlock* GetBlock(size_t reserve) RASP_NOEXCEPT;
+    MemoryBlock* GetBlock(size_t reserve) RASP_NOEXCEPT;
 
 
+    /**
+     * Store last memory block.
+     * @param block_begin The last allocated block.
+     */
     RASP_INLINE void set_tail(Byte* block_begin) RASP_NOEXCEPT {
       tail_block_ = block_begin;
     }
 
 
+    /**
+     * Check wheter the given block is tail of the chunk or not.
+     * @param block_begin New memory block.
+     */
     RASP_INLINE bool IsTail(Byte* block_begin) RASP_NOEXCEPT {
       return tail_block_ == block_begin;
     }
 
 
+    /**
+     * Connect new chunk to the next link.
+     * @param chunk New chunk.
+     */
     RASP_INLINE void set_next(Chunk* chunk) RASP_NOEXCEPT {next_ = chunk;}
 
 
+    /**
+     * Return next link.
+     */
     RASP_INLINE Chunk* next() RASP_NO_SE {return next_;}
 
 
+    /**
+     * Return current chunk size.
+     */
     RASP_INLINE size_t size() RASP_NO_SE {return block_size_;}
     
   
@@ -222,6 +350,9 @@ class MemoryPool : private Uncopyable {
   };
 
 
+  /**
+   * The linked list of chunk.
+   */
   class ChunkList {
    public:
     ChunkList()
@@ -230,19 +361,52 @@ class MemoryPool : private Uncopyable {
           free_head_(nullptr),
           current_free_(nullptr) {}
 
+
+    /**
+     * Return head of list.
+     */
     RASP_INLINE MemoryPool::Chunk* head() RASP_NO_SE {return head_;}
+
+
+    /**
+     * Return tail of list.
+     */
     RASP_INLINE MemoryPool::Chunk* current() RASP_NO_SE {return current_;}
 
+
+    /**
+     * Return head of free list.
+     */
     RASP_INLINE MemoryPool::MemoryBlock* free_head() RASP_NO_SE {return free_head_;}
+
+
+    /**
+     * Return tail of free list.
+     */
     RASP_INLINE MemoryPool::MemoryBlock* current_free() RASP_NO_SE {return current_free_;}
 
 
+    /**
+     * Connect memory block to tail of free list and replace tail.
+     * @param block Dealloced memory block.
+     */
     inline void AppendFreeList(MemoryPool::MemoryBlock* block) RASP_NOEXCEPT;
       
 
-    inline MemoryPool::MemoryBlock* FindApproximateDeallocedBlock(size_t size) RASP_NOEXCEPT;
+    /**
+     * Find the most nearly size block from free list if size class is 0.
+     * @param size Need
+     */
+    MemoryPool::MemoryBlock* FindApproximateDeallocedBlock(size_t size) RASP_NOEXCEPT;
 
 
+    /**
+     * Create new chunk and connect
+     * if current chunk not has enough size to allocate given size.
+     * @param size Need size
+     * @param default_size default size of the chunk if size class is zero
+     * @param mmap allocator
+     */
     inline void AllocChunkIfNecessary(size_t size, size_t default_size, Mmap* mmap);
 
 
@@ -254,6 +418,9 @@ class MemoryPool : private Uncopyable {
     inline void EraseFromDeallocedList(MemoryPool::MemoryBlock* find, MemoryPool::MemoryBlock* last) RASP_NOEXCEPT;
 
 
+    /**
+     * Swap head of free list to next and return last head.
+     */
     RASP_INLINE MemoryPool::MemoryBlock* SwapFreeHead() RASP_NOEXCEPT;
       
    private:
@@ -267,8 +434,15 @@ class MemoryPool : private Uncopyable {
   class LocalArena;
   
 
+  /**
+   * The arena which is allocated in global space.
+   */
   class CentralArena {
    public:
+    /**
+     * Constructor
+     * @param mmap allocator
+     */
     CentralArena(Mmap* mmap)
         : arena_head_(nullptr),
           arena_tail_(nullptr),
@@ -276,41 +450,80 @@ class MemoryPool : private Uncopyable {
       tls_ = new(mmap_->Commit(sizeof(ThreadLocalStorage::Slot))) ThreadLocalStorage::Slot(&TlsFree);
     }
 
-    
+
+    /**
+     * Get an arena from tls or allocate new one.
+     * @param size Need size.
+     * @param default_size Default chunk size.
+     */
     inline MemoryPool::MemoryBlock* Commit(size_t size, size_t default_size);
 
-    
+
+    /**
+     * Remove all arena.
+     */
     void Destroy();
 
 
+    /**
+     * Deallocate specified ptr.
+     * @param object The object which want to deallocate.
+     */
     void Dealloc(void* object);
 
 
-    inline void FreeArena(MemoryPool::LocalArena* arena);
+    /**
+     * Unlock arena.
+     * @param arena The arena which want to unlock.
+     */
+    RASP_INLINE void FreeArena(MemoryPool::LocalArena* arena);
     
    private:
-    
+
+
+    /**
+     * Return index of chunk list which fit to given size.
+     * @param size Need size.
+     */
     inline int FindBestFitBlockIndex(size_t size);
 
 
+    /**
+     * Find out arena which was unlocked.
+     */
     inline LocalArena* FindUnlockedArena();
     
 
+    /**
+     * Initialize chunk.
+     * @param size Need size.
+     * @param default_size Default chunk size.
+     * @param index The class of arena.
+     */
     RASP_INLINE MemoryPool::ChunkList* InitChunk(size_t size, size_t default_size, int index);
 
 
+    /**
+     * Allocate arena to tls or get unlocked arena.
+     * @return Current thread local arena.
+     */
     RASP_INLINE MemoryPool::LocalArena* TlsAlloc();
     
 
+    /**
+     * Add an arena to linked list.
+     * @param arena The arena which want to connect.
+     */
     inline void StoreNewLocalArena(MemoryPool::LocalArena* arena);
     
 
-    std::atomic<LocalArena*> arena_head_;
-    std::atomic<LocalArena*> arena_tail_;
+    LocalArena* arena_head_;
+    LocalArena* arena_tail_;
 
     Mmap* mmap_;
     SpinLock lock_;
     SpinLock dealloc_lock_;
+    SpinLock tree_lock_;
     ThreadLocalStorage::Slot* tls_;
     
     static const int kSmallMax = 3 KB;
@@ -321,43 +534,73 @@ class MemoryPool : private Uncopyable {
   };
 
 
+  /**
+   * The thread local arena.
+   */
   class LocalArena {
    public:
+    /**
+     * Constructor
+     * @param central_arena The central arena.
+     * @param mmap Allocator
+     */
     inline LocalArena(CentralArena* central_arena, Mmap* mmap);
     inline ~LocalArena();
+
+
+    /**
+     * Return next MemoryPool::LocalArena.
+     */
+    RASP_INLINE LocalArena* next() RASP_NO_SE {
+      return next_;
+    }
+
+
+    /**
+     * Append MemoryPool::LocalArena to next link.
+     * @param An arena which want to connect.
+     */
+    RASP_INLINE void set_next(LocalArena* arena) RASP_NOEXCEPT {
+      next_ = arena;
+    }
+
     
-    inline LocalArena* next() RASP_NO_SE {
-      return next_.load();
-    }
-
-
-    inline void set_next(LocalArena* chunk_list) RASP_NOEXCEPT {
-      next_.store(chunk_list);
-    }
-
-
-    inline bool AcquireLock() RASP_NOEXCEPT {
+    /**
+     * Try lock arena.
+     */
+    RASP_INLINE bool AcquireLock() RASP_NOEXCEPT {
       return !lock_.test_and_set();
     }
 
 
-    inline void ReleaseLock() RASP_NOEXCEPT {
+    /**
+     * Unlock arena.
+     */
+    RASP_INLINE void ReleaseLock() RASP_NOEXCEPT {
       lock_.clear();
     }
 
 
-    inline ChunkList* chunk_list(int index) {
+    /**
+     * Get chunk which belong to given class index.
+     * @param index
+     * @return Specific class chunk list.
+     */
+    RASP_INLINE ChunkList* chunk_list(int index) {
       return classed_chunk_list_ + index;
     }
 
 
-    inline void Return();
+    /**
+     * Add The MemoryPool::LocalArena to free list of The MemoryPool::CentralArena.
+     */
+    RASP_INLINE void Return();
    private:
     CentralArena* central_arena_;
     std::atomic_flag lock_;
     Mmap* mmap_;
     ChunkList* classed_chunk_list_;
-    std::atomic<LocalArena*> next_;
+    LocalArena* next_;
   };
   
 
@@ -391,6 +634,7 @@ class MemoryPool : private Uncopyable {
 
   static const size_t kSizeBitSize = RASP_ALIGN_OFFSET(sizeof(SizeBit), kAlignment);
   static const uint8_t kDeallocedBit = 0x2;
+  static const uint8_t kArrayBit = 0x1;
   static const uint32_t kInvalidPointer = 0xDEADC0DE;
   static const size_t kValueOffset = kSizeBitSize + kPointerSize;
   static const int kMaxSmallObjectsCount = 30;
