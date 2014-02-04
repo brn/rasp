@@ -52,7 +52,7 @@ rasp::MemoryPool::MemoryBlock* MemoryPool::Chunk::GetBlock(size_t reserve) RASP_
     reinterpret_cast<MemoryBlock*>(tail_block_)->set_next_ptr(ret);
   }
   
-  size_t reserved_size = RASP_ALIGN_OFFSET((kValueOffset + reserve), kAlignment);
+  size_t reserved_size = RASP_ALIGN_OFFSET((sizeof(MemoryBlock) + reserve), kAlignment);
   size_t real_size = reserve + (reserved_size - (kValueOffset + reserve));
   used_ += reserved_size;
   tail_block_ = ret;
@@ -99,26 +99,26 @@ MemoryPool& MemoryPool::operator = (MemoryPool&& memory_pool) {
 
 
 
-MemoryPool::ChunkList* MemoryPool::LocalArena::InitHugeChunkList(int index) {
-  if (huge_chunk_map_.count(index) != 0) {
-    return huge_chunk_map_[index];
+MemoryPool::FreeChunkList* MemoryPool::LocalArena::InitHugeFreeChunkList(int index) {
+  if (huge_free_chunk_map_.count(index) != 0) {
+    return huge_free_chunk_map_[index];
   }
-  ChunkList* new_chunk_list = new(mmap_->Commit(sizeof(ChunkList))) ChunkList();
-  huge_chunk_map_[index] = new_chunk_list;
-  return new_chunk_list;
+  FreeChunkList* new_free_chunk_list = new(mmap_.Commit(sizeof(ChunkList))) FreeChunkList();
+  huge_free_chunk_map_[index] = new_free_chunk_list;
+  return new_free_chunk_list;
+}
+
+
+bool MemoryPool::LocalArena::HasHugeFreeChunkList(int index) {
+  return huge_free_chunk_map_.count(index) != 0;
 }
 
 
 void MemoryPool::CentralArena::Destroy() {
   LocalArena* arena = arena_head_;
   while (arena != nullptr) {
-    for (int i = 0; i < kMaxSmallObjectsCount; i++) {
-      auto chunk_list = arena->chunk_list(i);
-      IterateChunkList(chunk_list);
-      for (auto c: *(arena->huge_chunk_map())) {
-        IterateChunkList(c.second);
-      }
-    }
+    auto chunk_list = arena->chunk_list();
+    IterateChunkList(chunk_list);
     arena = arena->next();
   }
   tls_->~Slot();
@@ -149,8 +149,11 @@ void MemoryPool::CentralArena::Dealloc(void* object) {
   memory_block->MarkAsDealloced();
   ASSERT(true, memory_block->IsMarkedAsDealloced());
   int index = FindBestFitBlockIndex(memory_block->size());
-  TlsAlloc()->chunk_list(index)->AppendFreeList(memory_block);
+  LocalArena* arena = TlsAlloc();
+  arena->free_chunk_list(index)->AppendFreeList(memory_block);
 }
 
+
+const int MemoryPool::kValueOffset = sizeof(MemoryPool::MemoryBlock);
 } //namespace rasp
 

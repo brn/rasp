@@ -112,9 +112,30 @@ class MemoryPool : private Uncopyable {
   friend class Poolable;
  private:
   class Chunk;
-  struct MemoryBlock;
+  class MemoryBlock;
   class ChunkList;
   typedef Mmap::MmapStandardAllocator<std::pair<const size_t, MemoryPool::ChunkList*>> HugeChunkAllocator;
+
+#ifdef PLATFORM_64BIT
+  typedef uint64_t SizeBit;
+  typedef uint64_t Size;
+  static const uint64_t kTagRemoveBit = ~uint64_t(3);
+  static const uint64_t kMaxAllocatableSize = UINT64_MAX;
+  static const uint64_t kDeallocedMask = ~uint64_t(2);
+#elif defined(PLATFORM_32BIT)
+  typedef uint32_t SizeBit;
+  typedef uint32_t Size;
+  static const uint64_t kTagRemoveBit = ~uint32_t(3);
+  static const uint32_t kMaxAllocatableSize = UINT32_MAX;
+  static const uint64_t kDeallocedMask = ~uint32_t(2);
+#endif
+
+  static const size_t kSizeBitSize = RASP_ALIGN_OFFSET(sizeof(SizeBit), kAlignment);
+  static const uint8_t kDeallocedBit = 0x2;
+  static const uint8_t kArrayBit = 0x1;
+  static const uint32_t kInvalidPointer = 0xDEADC0DE;
+  static const int kMaxSmallObjectsCount = 30;
+  static const int kValueOffset;
   
  public :
   /**
@@ -249,8 +270,8 @@ class MemoryPool : private Uncopyable {
    * Allocate unused memory space from chunk.
    */
   inline MemoryPool::MemoryBlock* DistributeBlock(size_t size);
-
-
+  
+  
   /**
    * The memory block representation class.
    */
@@ -350,6 +371,9 @@ class MemoryPool : private Uncopyable {
      * Return current chunk size.
      */
     RASP_INLINE size_t size() RASP_NO_SE {return block_size_;}
+
+
+    RASP_INLINE Byte* block() RASP_NOEXCEPT {return block_;}
     
   
    private :
@@ -369,9 +393,7 @@ class MemoryPool : private Uncopyable {
    public:
     ChunkList()
         : head_(nullptr),
-          current_(nullptr),
-          free_head_(nullptr),
-          current_free_(nullptr) {}
+          current_(nullptr) {}
 
 
     /**
@@ -387,52 +409,17 @@ class MemoryPool : private Uncopyable {
 
 
     /**
-     * Return head of free list.
-     */
-    RASP_INLINE MemoryPool::MemoryBlock* free_head() RASP_NO_SE {return free_head_;}
-
-
-    /**
-     * Return tail of free list.
-     */
-    RASP_INLINE MemoryPool::MemoryBlock* current_free() RASP_NO_SE {return current_free_;}
-
-
-    /**
-     * Connect memory block to tail of free list and replace tail.
-     * @param block Dealloced memory block.
-     */
-    inline void AppendFreeList(MemoryPool::MemoryBlock* block) RASP_NOEXCEPT;
-
-
-    /**
      * Create new chunk and connect
      * if current chunk not has enough size to allocate given size.
      * @param size Need size
      * @param default_size default size of the chunk if size class is zero
      * @param mmap allocator
      */
-    inline void AllocChunkIfNecessary(size_t size, size_t default_size, Mmap* mmap);
-
-
-    /**
-     * Remove MemoryBlock from the free list.
-     * @param find The pointer which is realloced.
-     * @param last The pointer which is the prev pointer of the find.
-     */
-    inline void EraseFromDeallocedList(MemoryPool::MemoryBlock* find, MemoryPool::MemoryBlock* last) RASP_NOEXCEPT;
-
-
-    /**
-     * Swap head of free list to next and return last head.
-     */
-    RASP_INLINE MemoryPool::MemoryBlock* SwapFreeHead() RASP_NOEXCEPT;
+    inline void AllocChunkIfNecessary(size_t size, Mmap* mmap);
       
    private:
     MemoryPool::Chunk* head_;
     MemoryPool::Chunk* current_;
-    MemoryPool::MemoryBlock* free_head_;
-    MemoryPool::MemoryBlock* current_free_;
   };
 
 
@@ -509,7 +496,7 @@ class MemoryPool : private Uncopyable {
      * @param default_size Default chunk size.
      * @param index The class of arena.
      */
-    RASP_INLINE MemoryPool::ChunkList* InitChunk(size_t size, size_t default_size, int index);
+    RASP_INLINE MemoryPool::LocalArena* InitChunk(size_t size, size_t default_size, int index);
 
 
     /**
@@ -550,11 +537,43 @@ class MemoryPool : private Uncopyable {
   };
 
 
+  class FreeChunkList: private Uncopyable {
+   public:
+    FreeChunkList()
+        : free_head_(nullptr),
+          current_free_(nullptr) {}
+    ~FreeChunkList() = default;
+    
+    /**
+     * Connect memory block to tail of free list and replace tail.
+     * @param block Dealloced memory block.
+     */
+    inline void AppendFreeList(MemoryPool::MemoryBlock* block) RASP_NOEXCEPT;
+
+
+    /**
+     * Swap head of free list to next and return last head.
+     */
+    RASP_INLINE MemoryPool::MemoryBlock* SwapFreeHead() RASP_NOEXCEPT;
+
+
+    RASP_INLINE bool has_head() RASP_NO_SE {
+      return free_head_ != nullptr;
+    }
+    
+    
+   private:
+    MemoryPool::MemoryBlock* free_head_;
+    MemoryPool::MemoryBlock* current_free_;
+    SpinLock tree_lock_;
+  };
+  
+
   /**
    * The thread local arena.
    */
   class LocalArena {
-    typedef std::unordered_map<size_t, MemoryPool::ChunkList*,
+    typedef std::unordered_map<size_t, MemoryPool::FreeChunkList*,
                                std::hash<size_t>,
                                std::equal_to<size_t>,
                                HugeChunkAllocator> HugeChunkMap;
@@ -564,7 +583,7 @@ class MemoryPool : private Uncopyable {
      * @param central_arena The central arena.
      * @param mmap Allocator
      */
-    inline LocalArena(CentralArena* central_arena, Mmap* mmap, HugeChunkAllocator* huge_chunk_allocator);
+    inline LocalArena(CentralArena* central_arena, HugeChunkAllocator* huge_chunk_allocator);
     inline ~LocalArena();
 
 
@@ -602,24 +621,27 @@ class MemoryPool : private Uncopyable {
 
 
     /**
-     * Get chunk which belong to given class index.
-     * @param index
+     * Get chunk.
      * @return Specific class chunk list.
      */
-    RASP_INLINE ChunkList* chunk_list(int index) {
-      if (index <= kMaxSmallObjectsCount) {
-        return classed_chunk_list_ + index;
-      } else {
-        return InitHugeChunkList(index);
-      }
+    RASP_INLINE ChunkList* chunk_list() {
+      return &chunk_list_;
     }
 
 
-    /**
-     * Return huge chunk map.
-     */
-    RASP_INLINE HugeChunkMap* huge_chunk_map() RASP_NOEXCEPT {
-      return &huge_chunk_map_;
+    RASP_INLINE FreeChunkList* free_chunk_list(int index) {
+      if (index <= kMaxSmallObjectsCount) {
+        return free_chunk_list_ + index;
+      }
+      return InitHugeFreeChunkList(index);
+    }
+
+
+    RASP_INLINE bool has_free_chunk(int index) {
+      if (index <= kMaxSmallObjectsCount) {
+        return (free_chunk_list_ + index)->has_head();
+      }
+      return HasHugeFreeChunkList(index);
     }
 
 
@@ -630,7 +652,15 @@ class MemoryPool : private Uncopyable {
     MemoryPool::MemoryBlock* FindFreeBlockFromHugeMap(int index) RASP_NOEXCEPT;
 
 
-    ChunkList* InitHugeChunkList(int index);
+    MemoryPool::FreeChunkList* InitHugeFreeChunkList(int index);
+
+
+    bool HasHugeFreeChunkList(int index);
+
+
+    Mmap* allocator() RASP_NOEXCEPT {
+      return &mmap_;
+    }
 
 
     /**
@@ -640,9 +670,11 @@ class MemoryPool : private Uncopyable {
    private:
     CentralArena* central_arena_;
     std::atomic_flag lock_;
-    Mmap* mmap_;
-    ChunkList* classed_chunk_list_;
-    HugeChunkMap huge_chunk_map_;
+    Mmap mmap_;
+    ChunkList chunk_list_;
+    FreeChunkList* free_chunk_list_;
+    HugeChunkMap huge_free_chunk_map_;
+    Byte free_chunk_list_heap_[sizeof(FreeChunkList) * (kMaxSmallObjectsCount + 1)];
     LocalArena* next_;
   };
   
@@ -660,27 +692,6 @@ class MemoryPool : private Uncopyable {
   std::atomic_flag deleted_;
   SpinLock tree_lock_;
   Mmap allocator_;
-
-#ifdef PLATFORM_64BIT
-  typedef uint64_t SizeBit;
-  typedef uint64_t Size;
-  static const uint64_t kTagRemoveBit = 0xFFFFFFFFFFFFFFFC;
-  static const uint64_t kMaxAllocatableSize = UINT64_MAX;
-  static const uint64_t kDeallocedMask = 0xFFFFFFFFFFFFFFFD;
-#elif defined(PLATFORM_32BIT)
-  typedef uint32_t SizeBit;
-  typedef uint32_t Size;
-  static const uint64_t kTagRemoveBit = 0xFFFFFFFC;
-  static const uint32_t kMaxAllocatableSize = UINT32_MAX;
-  static const uint64_t kDeallocedMask = 0xFFFFFFFD;
-#endif
-
-  static const size_t kSizeBitSize = RASP_ALIGN_OFFSET(sizeof(SizeBit), kAlignment);
-  static const uint8_t kDeallocedBit = 0x2;
-  static const uint8_t kArrayBit = 0x1;
-  static const uint32_t kInvalidPointer = 0xDEADC0DE;
-  static const size_t kValueOffset = kSizeBitSize + kPointerSize;
-  static const int kMaxSmallObjectsCount = 30;
 };
 
 } // namesapce rasp

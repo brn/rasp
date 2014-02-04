@@ -35,7 +35,7 @@
 #if defined(HAVE_MMAP)
 #include "mmap-mmap.h"
 namespace {
-static const size_t kDefaultByte = RASP_ALIGN_OFFSET((100 KB), rasp::SystemInfo::GetPageSize());
+static const size_t kDefaultByte = rasp::SystemInfo::GetPageSize();
 }
 #elif defined(HAVE_VIRTUALALLOC)
 #include "mmap-virtual-alloc.h"

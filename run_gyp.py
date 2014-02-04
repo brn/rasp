@@ -266,9 +266,9 @@ def BuildConfig(args) :
   ], 'alignof is required.')
   builder.AddMacroCode("""
   #if defined(__x86_64__) || defined(_M_X64)
-    #define PLATFORM_64BIT 1
+    #define PLATFORM_64BIT
   #elif defined(__i386) || defined(_M_IX86)
-    #define PLATFORM_32BIT 1
+    #define PLATFORM_32BIT
   #endif
   """)
   builder.Build()

@@ -112,7 +112,7 @@ class Array : public rasp::Poolable {
   ~Array() {(*ok) = true;}
 };
 
-
+/*
 TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_from_chunk) {
   uint64_t ok = 0u;
   rasp::MemoryPool p(1024);
@@ -156,13 +156,27 @@ TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_random) {
 }
 
 
+TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_and_dealloc) {
+  uint64_t ok = 0u;
+  rasp::MemoryPool p(1024);
+  for (uint64_t i = 0u; i < kSize; i++) {
+    Test1* t = new(&p) Test1(&ok);
+    p.Dealloc(t);
+  }
+  p.Destroy();
+  ASSERT_EQ(kSize, ok);
+}
+*/
+
 TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_and_dealloc2) {
+  static const size_t kSize = 100;
   uint64_t ok = 0u;
   std::random_device rd;
 	std::mt19937 mt(rd());
 	std::uniform_int_distribution<size_t> size(1, 100);
   rasp::MemoryPool p(1024);
   void* last = nullptr;
+  int x = 0;
   for (uint64_t i = 0u; i < kSize; i++) {
     int s = size(mt);
     int ss = s % 6 == 0;
@@ -187,19 +201,7 @@ TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_and_dealloc2) {
   ASSERT_EQ(kSize, ok);
 }
 
-
-TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_and_dealloc) {
-  uint64_t ok = 0u;
-  rasp::MemoryPool p(1024);
-  for (uint64_t i = 0u; i < kSize; i++) {
-    Test1* t = new(&p) Test1(&ok);
-    p.Dealloc(t);
-  }
-  p.Destroy();
-  ASSERT_EQ(kSize, ok);
-}
-
-
+/*
 TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_big_object) {
   uint64_t ok = 0u;
   rasp::MemoryPool p(8);
@@ -220,11 +222,13 @@ TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_many_big_object) {
 }
 
 
+
 TEST_F(MemoryPoolTest, MemoryPoolTest_performance1) {
   rasp::MemoryPool p(1024);
   uint64_t ok = 0u;
+  Test1* stack[kSize];
   for (uint64_t i = 0u; i < kSize; i++) {
-    new(&p) Test1(&ok);
+    stack[i] = new(&p) Test1(&ok);
   }
   p.Destroy();
   ASSERT_EQ(kSize, ok);
@@ -245,19 +249,19 @@ TEST_F(MemoryPoolTest, MemoryPoolTest_performance2) {
 
 TEST_F(MemoryPoolTest, MemoryPoolTest_performance3) {
   uint64_t ok = 0u;
-  std::vector<Test0*> list(kSize);
+  Test0* stack[kSize];
   for (uint64_t i = 0u; i < kSize; i++) {
-    list[i] = new Test0(&ok);
+    stack[i] = new Test0(&ok);
   }
-  for (auto c: list) {
-    delete c;
+  for (uint64_t i = 0u; i < kSize; i++) {
+    delete stack[i];
   }
   ASSERT_EQ(kSize, ok);
 }
 
 
 TEST_F(MemoryPoolTest, MemoryPoolTest_thread) {
-  static const int kSize = 10000;  
+  static const int kSize = 100000;  
   uint64_t ok = 0u;
   rasp::MemoryPool p(1024);
   std::atomic<int> index(0);
@@ -283,6 +287,42 @@ TEST_F(MemoryPoolTest, MemoryPoolTest_thread) {
   while(index != kThreadSize) {}
   
   p.Destroy();
+  ASSERT_EQ(kSize * kThreadSize, ok);
+}
+
+
+TEST_F(MemoryPoolTest, MemoryPoolTest_thread_new) {
+  static const int kSize = 100000;
+  static const int kStackSize = kSize * kThreadSize;
+  uint64_t ok = 0u;
+  Test0* stack[100000 * 4];
+  std::atomic<int> index(0);
+  auto fn = [&](int id) {
+    int current = 100000 * id;
+    for (uint64_t i = 0u; i < kSize; i++) {
+      stack[current + i] = new Test0(&ok);
+    }
+    index++;
+  };
+  
+  std::vector<std::thread*> threads;
+  for (int i = 0; i < kThreadSize; i++) {
+    auto th = new std::thread(fn, i);
+    threads.push_back(th);
+  }
+  for (int i = 0; i < kThreadSize; i++) {
+    //if (threads[i]->joinable()) {
+      threads[i]->detach();
+      //}
+    delete threads[i];
+  }
+
+  while(index != kThreadSize) {}
+
+  for (int i = 0; i < kStackSize; i++) {
+    delete stack[i];
+  }
+  
   ASSERT_EQ(kSize * kThreadSize, ok);
 }
 
@@ -382,3 +422,4 @@ TEST_F(MemoryPoolTest, MemoryPoolTest_thread_random_dealloc) {
   ASSERT_EQ(kSize * kThreadSize, ok);
 }
 
+*/
