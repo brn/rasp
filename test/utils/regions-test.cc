@@ -26,15 +26,17 @@
 #include <random>
 #include <thread>
 #include <memory>
-#include "../../src/utils/memorypool.h"
+#include "../../src/utils/regions.h"
 #include "../../src/utils/systeminfo.h"
 #include "../../src/utils/utils.h"
 
 static const uint64_t kSize = 1000000u;
-static const int kThreadSize = rasp::SystemInfo::GetOnlineProcessorCount();
+static const size_t kThreadSize = rasp::SystemInfo::GetOnlineProcessorCount();
+#define LOOP_FOR_THREAD_SIZE for (unsigned i = 0; i < kThreadSize; i++)
+#define BUSY_WAIT(counter) while (counter != kThreadSize)
 
 
-class MemoryPoolTest: public ::testing::Test {
+class RegionsTest: public ::testing::Test {
  public:
   static void SetUpTestCase() {
     rasp::Printf("[TEST CONFIG] DefaultObjectCreationCount %llu.\n", kSize);
@@ -50,55 +52,49 @@ class Test0 {
   uint64_t* ok;
 };
 
-class Test1 : public rasp::Poolable {
+class Test1 : public rasp::RegionalObject {
  public:
-  Test1(uint64_t* ok):rasp::Poolable(),ok(ok){}
+  Test1(uint64_t* ok):rasp::RegionalObject(),ok(ok){}
   ~Test1() {(*ok)++;}
   uint64_t* ok;
 };
 
 
-class Test2 : public rasp::Poolable  {
+class Test2 : public rasp::RegionalObject  {
  public:
-  Test2(uint64_t* ok):rasp::Poolable(),ok(ok){}
+  Test2(uint64_t* ok):rasp::RegionalObject(),ok(ok){}
   ~Test2() {(*ok)++;}
   uint64_t* ok;
-  uint64_t padding1;
-  uint64_t padding2;
+  uint64_t padding1 RASP_UNUSED;
+  uint64_t padding2 RASP_UNUSED;
 };
 
 
-class Test3 : public rasp::Poolable  {
+class Test3 : public rasp::RegionalObject  {
  public:
-  Test3(uint64_t* ok):rasp::Poolable(),ok(ok){}
+  Test3(uint64_t* ok):rasp::RegionalObject(),ok(ok){}
   ~Test3() {(*ok)++;}
   uint64_t* ok;
-  uint64_t padding1;
-  uint64_t padding2;
-  uint64_t padding3;
-  uint64_t padding4;
+  uint64_t padding1 RASP_UNUSED;
+  uint64_t padding2 RASP_UNUSED;
+  uint64_t padding3 RASP_UNUSED;
+  uint64_t padding4 RASP_UNUSED;
 };
 
 
-class LargeObject : public rasp::Poolable  {
+class LargeObject : public rasp::RegionalObject  {
  public:
-  LargeObject(uint64_t* ok):rasp::Poolable(),ok(ok){}
+  LargeObject(uint64_t* ok):rasp::RegionalObject(),ok(ok){}
   ~LargeObject() {(*ok)++;}
  private:
   uint64_t* ok;
-  uint64_t padding1;
-  uint64_t padding2;
-  uint64_t padding3;
-  uint64_t padding4;
-  uint64_t padding6;
-  uint64_t padding7;
-  uint64_t padding8;
+  char padding[20000] RASP_UNUSED;
 };
 
 
-class Deletable : public rasp::Poolable  {
+class Deletable : public rasp::RegionalObject  {
  public:
-  Deletable(uint64_t* ok):rasp::Poolable(),ok(ok){}
+  Deletable(uint64_t* ok):rasp::RegionalObject(),ok(ok){}
   ~Deletable() = default;
   void Destruct() {(*ok)++;}
  private:
@@ -106,24 +102,24 @@ class Deletable : public rasp::Poolable  {
 };
 
 
-class Array : public rasp::Poolable {
+class Array : public rasp::RegionalObject {
  public:
   bool* ok;
   ~Array() {(*ok) = true;}
 };
 
-/*
-TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_from_chunk) {
+
+TEST_F(RegionsTest, RegionsTest_allocate_from_chunk) {
   uint64_t ok = 0u;
-  rasp::MemoryPool p(1024);
+  rasp::Regions p(1024);
   new(&p) Test1(&ok);
   p.Destroy();
   ASSERT_EQ(ok, 1u);
 }
 
 
-TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk) {
-  rasp::MemoryPool p(1024);
+TEST_F(RegionsTest, RegionsTest_allocate_many_from_chunk) {
+  rasp::Regions p(1024);
   uint64_t ok = 0u;
   for (uint64_t i = 0u; i < kSize; i++) {
     new(&p) Test1(&ok);
@@ -133,12 +129,12 @@ TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk) {
 }
 
 
-TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_random) {
+TEST_F(RegionsTest, RegionsTest_allocate_many_from_chunk_random) {
   uint64_t ok = 0u;
   std::random_device rd;
 	std::mt19937 mt(rd());
 	std::uniform_int_distribution<size_t> size(1, 100);
-  rasp::MemoryPool p(1024);
+  rasp::Regions p(1024);
   for (uint64_t i = 0u; i < kSize; i++) {
     int s = size(mt);
     int t = s % 3 == 0;
@@ -156,9 +152,9 @@ TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_random) {
 }
 
 
-TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_and_dealloc) {
+TEST_F(RegionsTest, RegionsTest_allocate_many_from_chunk_and_dealloc) {
   uint64_t ok = 0u;
-  rasp::MemoryPool p(1024);
+  rasp::Regions p(1024);
   for (uint64_t i = 0u; i < kSize; i++) {
     Test1* t = new(&p) Test1(&ok);
     p.Dealloc(t);
@@ -166,17 +162,15 @@ TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_and_dealloc) {
   p.Destroy();
   ASSERT_EQ(kSize, ok);
 }
-*/
 
-TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_and_dealloc2) {
-  static const size_t kSize = 100;
+
+TEST_F(RegionsTest, RegionsTest_allocate_many_from_chunk_random_and_dealloc) {
   uint64_t ok = 0u;
   std::random_device rd;
 	std::mt19937 mt(rd());
 	std::uniform_int_distribution<size_t> size(1, 100);
-  rasp::MemoryPool p(1024);
+  rasp::Regions p(1024);
   void* last = nullptr;
-  int x = 0;
   for (uint64_t i = 0u; i < kSize; i++) {
     int s = size(mt);
     int ss = s % 6 == 0;
@@ -201,19 +195,20 @@ TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_many_from_chunk_and_dealloc2) {
   ASSERT_EQ(kSize, ok);
 }
 
-/*
-TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_big_object) {
+
+TEST_F(RegionsTest, RegionsTest_allocate_big_object) {
   uint64_t ok = 0u;
-  rasp::MemoryPool p(8);
+  rasp::Regions p(8);
   new(&p) LargeObject(&ok);
   p.Destroy();
   ASSERT_EQ(ok, 1u);
 }
 
 
-TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_many_big_object) {
+TEST_F(RegionsTest, RegionsTest_allocate_many_big_object) {
+  static const uint64_t kSize = 10000;
   uint64_t ok = 0u;
-  rasp::MemoryPool p(8);
+  rasp::Regions p(8);
   for (uint64_t i = 0u; i < kSize; i++) {
     new(&p) LargeObject(&ok);
   }
@@ -222,9 +217,22 @@ TEST_F(MemoryPoolTest, MemoryPoolTest_allocate_many_big_object) {
 }
 
 
+TEST_F(RegionsTest, RegionsTest_allocate_many_big_object_and_dealloc) {
+  static const uint64_t kSize = 10000;
+  uint64_t ok = 0u;
+  rasp::Regions p(8);
+  for (uint64_t i = 0u; i < kSize; i++) {
+    auto t = new(&p) LargeObject(&ok);
+    p.Dealloc(t);
+  }
+  p.Destroy();
+  ASSERT_EQ(kSize, ok);
+}
 
-TEST_F(MemoryPoolTest, MemoryPoolTest_performance1) {
-  rasp::MemoryPool p(1024);
+
+
+TEST_F(RegionsTest, RegionsTest_performance1) {
+  rasp::Regions p(1024);
   uint64_t ok = 0u;
   Test1* stack[kSize];
   for (uint64_t i = 0u; i < kSize; i++) {
@@ -235,7 +243,7 @@ TEST_F(MemoryPoolTest, MemoryPoolTest_performance1) {
 }
 
 
-TEST_F(MemoryPoolTest, MemoryPoolTest_performance2) {
+TEST_F(RegionsTest, RegionsTest_performance2) {
   uint64_t ok = 0u;
   {
     std::vector<std::shared_ptr<Test0>> list(kSize);
@@ -247,7 +255,7 @@ TEST_F(MemoryPoolTest, MemoryPoolTest_performance2) {
 }
 
 
-TEST_F(MemoryPoolTest, MemoryPoolTest_performance3) {
+TEST_F(RegionsTest, RegionsTest_performance3) {
   uint64_t ok = 0u;
   Test0* stack[kSize];
   for (uint64_t i = 0u; i < kSize; i++) {
@@ -260,11 +268,12 @@ TEST_F(MemoryPoolTest, MemoryPoolTest_performance3) {
 }
 
 
-TEST_F(MemoryPoolTest, MemoryPoolTest_thread) {
+TEST_F(RegionsTest, RegionsTest_thread) {
   static const int kSize = 100000;  
   uint64_t ok = 0u;
-  rasp::MemoryPool p(1024);
-  std::atomic<int> index(0);
+  rasp::Regions p(1024);
+  std::atomic<unsigned> index(0);
+  
   auto fn = [&]() {
     for (uint64_t i = 0u; i < kSize; i++) {
       new(&p) Test1(&ok);
@@ -273,30 +282,28 @@ TEST_F(MemoryPoolTest, MemoryPoolTest_thread) {
   };
   
   std::vector<std::thread*> threads;
-  for (int i = 0; i < kThreadSize; i++) {
+  LOOP_FOR_THREAD_SIZE {
     auto th = new std::thread(fn);
     threads.push_back(th);
   }
-  for (int i = 0; i < kThreadSize; i++) {
-    //if (threads[i]->joinable()) {
-      threads[i]->detach();
-      //}
+  LOOP_FOR_THREAD_SIZE {
+    threads[i]->detach();
     delete threads[i];
   }
 
-  while(index != kThreadSize) {}
+  BUSY_WAIT(index) {}
   
   p.Destroy();
   ASSERT_EQ(kSize * kThreadSize, ok);
 }
 
 
-TEST_F(MemoryPoolTest, MemoryPoolTest_thread_new) {
+TEST_F(RegionsTest, RegionsTest_thread_new) {
   static const int kSize = 100000;
   static const int kStackSize = kSize * kThreadSize;
   uint64_t ok = 0u;
   Test0* stack[100000 * 4];
-  std::atomic<int> index(0);
+  std::atomic<unsigned> index(0);
   auto fn = [&](int id) {
     int current = 100000 * id;
     for (uint64_t i = 0u; i < kSize; i++) {
@@ -306,18 +313,16 @@ TEST_F(MemoryPoolTest, MemoryPoolTest_thread_new) {
   };
   
   std::vector<std::thread*> threads;
-  for (int i = 0; i < kThreadSize; i++) {
+  LOOP_FOR_THREAD_SIZE {
     auto th = new std::thread(fn, i);
     threads.push_back(th);
   }
-  for (int i = 0; i < kThreadSize; i++) {
-    //if (threads[i]->joinable()) {
-      threads[i]->detach();
-      //}
+  LOOP_FOR_THREAD_SIZE {
+    threads[i]->detach();
     delete threads[i];
   }
 
-  while(index != kThreadSize) {}
+  BUSY_WAIT(index) {}
 
   for (int i = 0; i < kStackSize; i++) {
     delete stack[i];
@@ -327,11 +332,11 @@ TEST_F(MemoryPoolTest, MemoryPoolTest_thread_new) {
 }
 
 
-TEST_F(MemoryPoolTest, MemoryPoolTest_thread_random) {
+TEST_F(RegionsTest, RegionsTest_thread_random) {
   static const int kSize = 10000;
   uint64_t ok = 0u;
-  rasp::MemoryPool p(1024);
-  std::atomic<int> index(0);
+  rasp::Regions p(1024);
+  std::atomic<unsigned> index(0);
   auto fn = [&]() {
     std::random_device rd;
     std::mt19937 mt(rd());
@@ -352,30 +357,30 @@ TEST_F(MemoryPoolTest, MemoryPoolTest_thread_random) {
   };
   
   std::vector<std::thread*> threads;
-  for (int i = 0; i < kThreadSize; i++) {
+  LOOP_FOR_THREAD_SIZE {
     auto th = new std::thread(fn);
     threads.push_back(th);
   }
-  for (int i = 0; i < kThreadSize; i++) {
-    //if (threads[i]->joinable()) {
-      threads[i]->detach();
-      //}
+  LOOP_FOR_THREAD_SIZE {
+    threads[i]->detach();
     delete threads[i];
   }
 
-  while(index != kThreadSize) {}
+  BUSY_WAIT(index) {}
   
   p.Destroy();
   ASSERT_EQ(kSize * kThreadSize, ok);
 }
 
 
-TEST_F(MemoryPoolTest, MemoryPoolTest_thread_random_dealloc) {
+TEST_F(RegionsTest, RegionsTest_thread_random_dealloc) {
   static const int kSize = 10000;
   uint64_t ok = 0u;
-  rasp::MemoryPool p(1024);
-  std::atomic<int> index(0);
+  rasp::Regions p(1024);
+  std::atomic<unsigned> index(0);
+  std::atomic<bool> wait(true);
   auto fn = [&]() {
+    while (wait.load()) {}
     std::random_device rd;
     std::mt19937 mt(rd());
     std::uniform_int_distribution<size_t> size(1, 100);
@@ -406,20 +411,17 @@ TEST_F(MemoryPoolTest, MemoryPoolTest_thread_random_dealloc) {
   };
   
   std::vector<std::thread*> threads;
-  for (int i = 0; i < kThreadSize; i++) {
+  LOOP_FOR_THREAD_SIZE {
     auto th = new std::thread(fn);
     threads.push_back(th);
   }
-  for (int i = 0; i < kThreadSize; i++) {
-    //if (threads[i]->joinable()) {
-      threads[i]->detach();
-      //}
+  LOOP_FOR_THREAD_SIZE {
+    threads[i]->detach();
     delete threads[i];
   }
+  wait.store(false);
 
-  while(index != kThreadSize) {}
+  BUSY_WAIT(index) {}
   p.Destroy();
   ASSERT_EQ(kSize * kThreadSize, ok);
 }
-
-*/

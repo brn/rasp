@@ -56,6 +56,14 @@ namespace rasp {
 
 #define RASP_NO_SE const RASP_NOEXCEPT
 
+
+#if defined(HAVE_UNUSED_ATTRIBUTE)
+#define RASP_UNUSED __attribute__((unused))
+#else
+#define RASP_UNUSED
+#endif
+
+
 #ifndef __PRETTY_FUNCTION__
 #ifdef __func__
 #define __PRETTY_FUNCTION__ __func__

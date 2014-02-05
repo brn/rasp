@@ -81,8 +81,8 @@
       },
     },
     {
-      'target_name': 'memorypool_test',
-      'product_name': 'MemoryPoolTest',
+      'target_name': 'regions_test',
+      'product_name': 'RegionsTest',
       'type': 'executable',
       'include_dirs' : ['./lib', '<(additional_include)'],
       'defines' : ['GTEST_HAS_RTTI=0', 'UNIT_TEST=1'],
@@ -90,9 +90,9 @@
         './src/utils/systeminfo.cc',
         './src/utils/tls.cc',
         './src/utils/os.cc',
-        './src/utils/memorypool.cc',
+        './src/utils/regions.cc',
         './lib/gtest/gtest-all.cc',
-        './test/utils/memorypool-test.cc',
+        './test/utils/regions-test.cc',
         './test/test-main.cc'
       ],
       'xcode_settings': {

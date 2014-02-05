@@ -199,6 +199,14 @@ def BuildConfig(args) :
   ], 'inline attribute is required.')
   builder.CheckStruct(False, [
     {
+      'name': 'unused_attribute',
+      'code' : '''
+        int Test(int x __attribute__((unused))) {return 0;}
+      '''
+    }
+  ], 'unused attribute is required.')
+  builder.CheckStruct(False, [
+    {
       'name': 'HeapAlloc',
       'header' : ['Windows.h'],
       'function': 'HeapAlloc'

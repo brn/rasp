@@ -41,28 +41,28 @@
 
 namespace rasp {
 
-class MemoryPool;
+class Regions;
 
 
 /**
- * Base class of the MemoryPool allocatable object.
+ * Base class of the Regions allocatable object.
  */
-class Poolable {
+class RegionalObject {
  public:
   /**
-   * Create object from MemoryPool allocated memory.
+   * Create object from Regions allocated memory.
    * The object created by this operator new must not delete or free.
-   * If you want to delete object call MemoryPool::Dealloc(void*).
+   * If you want to delete object call Regions::Dealloc(void*).
    */
-  inline void* operator new (size_t size, MemoryPool* pool);
+  inline void* operator new (size_t size, Regions* pool);
 
 
   /**
-   * Create array of object from MemoryPool allocated memory.
+   * Create array of object from Regions allocated memory.
    * The object created by this operator new must not delete or free.
-   * If you want to delete object call MemoryPool::Dealloc(void*).
+   * If you want to delete object call Regions::Dealloc(void*).
    */
-  inline void* operator new[] (size_t size, MemoryPool* pool);
+  inline void* operator new[] (size_t size, Regions* pool);
 
 
   /**
@@ -78,43 +78,55 @@ class Poolable {
 
 
   /**
-   * Called auto by system if operator new(void*, MemoryPool*) failed.
+   * Called auto by system if operator new(void*, Regions*) failed.
    */
-  inline void operator delete (void* ptr, MemoryPool* pool){};
+  inline void operator delete (void* ptr, Regions* pool){};
 
   
   /**
-   * Called auto by system if operator new[](void*, MemoryPool*) failed.
+   * Called auto by system if operator new[](void*, Regions*) failed.
    */
-  inline void operator delete[] (void* ptr, MemoryPool* pool){};
-  virtual ~Poolable() {}
+  inline void operator delete[] (void* ptr, Regions* pool){};
+
+
+  /**
+   * virtual destructor.
+   */
+  virtual ~RegionalObject() {}
 };
 
 
 /**
  * Fast thread safe memory allocator.
  * All memory allocateded from heap(mmap/VirtualAlloc).
- * This memory pool allocate object and array which public extends rasp::Poolable,
+ * This memory pool allocate object and array which public extends rasp::RegionalObject,
  * and all allocated object is dealloced by destructor, but if you want,
- * call MemoryPool::Dealloc(void*) explicitly.
+ * call Regions::Dealloc(void*) explicitly.
  *
  * @example
- * rasp::MemoryPool p(1024);
- * PoolableExtendClass* poolable = new(&p) PoolableExtendClass();
+ * rasp::Regions p(1024);
+ * RegionalObjectExtendClass* poolable = new(&p) RegionalObjectExtendClass();
  * // something special.
  * p.Destroy();
- * // If do not call MemoryPool::Destroy(void),
- * // that called in MemoryPool destructor.
+ * // If do not call Regions::Destroy(void),
+ * // that called in Regions destructor.
  */
-class MemoryPool : private Uncopyable {
-  // Only Poolable derived class can call
-  // MemoryPool::Allocate(size_t) or MemoryPool::AllocateArray(size_t).
-  friend class Poolable;
+class Regions : private Uncopyable {
+  // Only RegionalObject derived class can call
+  // Regions::Allocate(size_t) or Regions::AllocateArray(size_t).
+  friend class RegionalObject;
  private:
   class Chunk;
-  class MemoryBlock;
+  class FreeHeader;
+  class Header;
   class ChunkList;
-  typedef Mmap::MmapStandardAllocator<std::pair<const size_t, MemoryPool::ChunkList*>> HugeChunkAllocator;
+  class FreeChunkStack;
+  class CentralArena;
+  typedef Mmap::MmapStandardAllocator<std::pair<const size_t, Regions::ChunkList*>> HugeChunkAllocator;
+  typedef std::unordered_map<size_t, Regions::FreeChunkStack*,
+                             std::hash<size_t>,
+                             std::equal_to<size_t>,
+                             HugeChunkAllocator> HugeChunkMap;
 
 #ifdef PLATFORM_64BIT
   typedef uint64_t SizeBit;
@@ -136,34 +148,32 @@ class MemoryPool : private Uncopyable {
   static const uint32_t kInvalidPointer = 0xDEADC0DE;
   static const int kMaxSmallObjectsCount = 30;
   static const int kValueOffset;
+  static const size_t kFreeHeaderSize;
+  static const size_t kHeaderSize;
   
  public :
   /**
    * Constructor
    * @param size The hint of each chunk size.
    */
-  explicit MemoryPool(size_t size = 512);
+  explicit Regions(size_t size = 512);
 
   
-  ~MemoryPool() {Destroy();}
+  ~Regions() {Destroy();}
 
 
-  MemoryPool(MemoryPool&& memory_pool)
-      : allocator_(std::move(memory_pool.allocator_)),
-        central_arena_(memory_pool.central_arena_),
-        dealloced_head_(memory_pool.dealloced_head_),
-        current_dealloced_(memory_pool.current_dealloced_),
-        size_(memory_pool.size_) {
+  Regions(Regions&& regions)
+      : central_arena_(regions.central_arena_),
+        size_(regions.size_),
+        allocator_(std::move(regions.allocator_)) {
     ASSERT(true, size_ <= kMaxAllocatableSize);
     deleted_.clear();
-    memory_pool.deleted_.test_and_set();
-    memory_pool.central_arena_ = nullptr;
-    memory_pool.dealloced_head_ = nullptr;
-    memory_pool.current_dealloced_ = nullptr;
+    regions.deleted_.test_and_set();
+    regions.central_arena_ = nullptr;
   }
   
 
-  MemoryPool& operator = (MemoryPool&& memory_pool);
+  Regions& operator = (Regions&& regions);
 
 
   /**
@@ -176,7 +186,7 @@ class MemoryPool : private Uncopyable {
    * Free the specified pointer.
    * This function in fact not release memory.
    * This method add memory block to the free list and call destructor.
-   * @param object The object pointer that must be allocated by MemoryPool::Allocate[Array].
+   * @param object The object pointer that must be allocated by Regions::Allocate[Array].
    */
   RASP_INLINE void Dealloc(void* object) RASP_NOEXCEPT;
 
@@ -261,15 +271,15 @@ class MemoryPool : private Uncopyable {
 
 
   /**
-   * Destruct Poolable class instance by the proper method.
+   * Destruct RegionalObject class instance by the proper method.
    */
-  RASP_INLINE static void DestructMemoryBlock(MemoryPool::MemoryBlock* memory_block);
+  RASP_INLINE static void DestructFreeHeader(Regions::Header* header);
 
 
   /**
    * Allocate unused memory space from chunk.
    */
-  inline MemoryPool::MemoryBlock* DistributeBlock(size_t size);
+  inline Regions::Header* DistributeBlock(size_t size);
   
   
   /**
@@ -333,7 +343,7 @@ class MemoryPool : private Uncopyable {
      * @param needed size.
      * @returns aligned memory chunk.
      */
-    MemoryBlock* GetBlock(size_t reserve) RASP_NOEXCEPT;
+    Header* GetBlock(size_t reserve) RASP_NOEXCEPT;
 
 
     /**
@@ -399,13 +409,13 @@ class MemoryPool : private Uncopyable {
     /**
      * Return head of list.
      */
-    RASP_INLINE MemoryPool::Chunk* head() RASP_NO_SE {return head_;}
+    RASP_INLINE Regions::Chunk* head() RASP_NO_SE {return head_;}
 
 
     /**
      * Return tail of list.
      */
-    RASP_INLINE MemoryPool::Chunk* current() RASP_NO_SE {return current_;}
+    RASP_INLINE Regions::Chunk* current() RASP_NO_SE {return current_;}
 
 
     /**
@@ -415,15 +425,55 @@ class MemoryPool : private Uncopyable {
      * @param default_size default size of the chunk if size class is zero
      * @param mmap allocator
      */
-    inline void AllocChunkIfNecessary(size_t size, Mmap* mmap);
+    inline Regions::Header* AllocChunkIfNecessary(size_t size, Mmap* mmap, Regions::CentralArena* arena);
       
    private:
-    MemoryPool::Chunk* head_;
-    MemoryPool::Chunk* current_;
+    Regions::Chunk* head_;
+    Regions::Chunk* current_;
   };
 
 
   class LocalArena;
+
+
+  class FreeChunkStack: private Uncopyable {
+   public:
+    FreeChunkStack()
+        : free_head_(nullptr){}
+    ~FreeChunkStack() = default;
+    
+    /**
+     * Connect memory block to tail of free list and replace tail.
+     * @param block Dealloced memory block.
+     */
+    inline void Unshift(Regions::Header* block) RASP_NOEXCEPT;
+
+
+    /**
+     * Swap head of free list to next and return last head.
+     */
+    RASP_INLINE Regions::Header* Shift() RASP_NOEXCEPT;
+
+
+    RASP_INLINE bool has_head() RASP_NO_SE {
+      return free_head_ != nullptr;
+    }
+
+
+    RASP_INLINE Regions::FreeHeader* head() RASP_NOEXCEPT {
+      return free_head_;
+    }
+
+
+    RASP_INLINE void Reset() RASP_NOEXCEPT {
+      free_head_ = nullptr;
+    }
+    
+    
+   private:
+    Regions::FreeHeader* free_head_;
+    SpinLock tree_lock_;
+  };
   
 
   /**
@@ -441,6 +491,7 @@ class MemoryPool : private Uncopyable {
           mmap_(mmap) {
       tls_ = tls_once_init_(&TlsFree);
       huge_chunk_allocator_ = huge_chunk_allocator_once_init_(mmap_);
+      huge_free_chunk_map_ = huge_free_chunk_map_once_init_(*huge_chunk_allocator_);
     }
 
 
@@ -452,7 +503,7 @@ class MemoryPool : private Uncopyable {
      * @param size Need size.
      * @param default_size Default chunk size.
      */
-    inline MemoryPool::MemoryBlock* Commit(size_t size, size_t default_size);
+    inline Regions::Header* Commit(size_t size, size_t default_size);
 
 
     /**
@@ -472,7 +523,19 @@ class MemoryPool : private Uncopyable {
      * Unlock arena.
      * @param arena The arena which want to unlock.
      */
-    RASP_INLINE void FreeArena(MemoryPool::LocalArena* arena);
+    RASP_INLINE void FreeArena(Regions::LocalArena* arena);
+
+
+    RASP_INLINE void AcquireFreeSpinLock() RASP_NOEXCEPT {
+      free_lock_.lock();
+    }
+
+
+    RASP_INLINE void ReleaseFreeSpinLock() RASP_NOEXCEPT {
+      free_lock_.unlock();
+    }
+
+    inline Regions::Header* FindFreeChunk(size_t size) RASP_NOEXCEPT;
     
    private:
 
@@ -496,35 +559,39 @@ class MemoryPool : private Uncopyable {
      * @param default_size Default chunk size.
      * @param index The class of arena.
      */
-    RASP_INLINE MemoryPool::LocalArena* InitChunk(size_t size, size_t default_size, int index);
+    RASP_INLINE Regions::LocalArena* InitChunk(size_t size, size_t default_size, int index);
 
 
     /**
      * Allocate arena to tls or get unlocked arena.
      * @return Current thread local arena.
      */
-    RASP_INLINE MemoryPool::LocalArena* TlsAlloc();
+    RASP_INLINE Regions::LocalArena* TlsAlloc();
     
 
     /**
      * Add an arena to linked list.
      * @param arena The arena which want to connect.
      */
-    inline void StoreNewLocalArena(MemoryPool::LocalArena* arena);
+    inline void StoreNewLocalArena(Regions::LocalArena* arena);
 
 
-    void IterateChunkList(MemoryPool::ChunkList*);
+    void IterateChunkList(Regions::ChunkList*);
     
 
     LocalArena* arena_head_;
     LocalArena* arena_tail_;
 
     Mmap* mmap_;
+    Regions::FreeChunkStack central_free_chunk_stack_[kMaxSmallObjectsCount];
     HugeChunkAllocator* huge_chunk_allocator_;
+    HugeChunkMap* huge_free_chunk_map_;
+    LazyInitializer<HugeChunkMap> huge_free_chunk_map_once_init_;
     LazyInitializer<HugeChunkAllocator> huge_chunk_allocator_once_init_;
     SpinLock lock_;
     SpinLock dealloc_lock_;
     SpinLock tree_lock_;
+    SpinLock free_lock_;
     ThreadLocalStorage::Slot* tls_;
     LazyInitializer<ThreadLocalStorage::Slot> tls_once_init_;
     
@@ -532,40 +599,8 @@ class MemoryPool : private Uncopyable {
     static const int kSmallMax = 3 KB;
 
     static inline void TlsFree(void* arena) {
-      reinterpret_cast<MemoryPool::LocalArena*>(arena)->Return();
+      reinterpret_cast<Regions::LocalArena*>(arena)->Return();
     }
-  };
-
-
-  class FreeChunkList: private Uncopyable {
-   public:
-    FreeChunkList()
-        : free_head_(nullptr),
-          current_free_(nullptr) {}
-    ~FreeChunkList() = default;
-    
-    /**
-     * Connect memory block to tail of free list and replace tail.
-     * @param block Dealloced memory block.
-     */
-    inline void AppendFreeList(MemoryPool::MemoryBlock* block) RASP_NOEXCEPT;
-
-
-    /**
-     * Swap head of free list to next and return last head.
-     */
-    RASP_INLINE MemoryPool::MemoryBlock* SwapFreeHead() RASP_NOEXCEPT;
-
-
-    RASP_INLINE bool has_head() RASP_NO_SE {
-      return free_head_ != nullptr;
-    }
-    
-    
-   private:
-    MemoryPool::MemoryBlock* free_head_;
-    MemoryPool::MemoryBlock* current_free_;
-    SpinLock tree_lock_;
   };
   
 
@@ -573,10 +608,6 @@ class MemoryPool : private Uncopyable {
    * The thread local arena.
    */
   class LocalArena {
-    typedef std::unordered_map<size_t, MemoryPool::FreeChunkList*,
-                               std::hash<size_t>,
-                               std::equal_to<size_t>,
-                               HugeChunkAllocator> HugeChunkMap;
    public:
     /**
      * Constructor
@@ -588,7 +619,7 @@ class MemoryPool : private Uncopyable {
 
 
     /**
-     * Return next MemoryPool::LocalArena.
+     * Return next Regions::LocalArena.
      */
     RASP_INLINE LocalArena* next() RASP_NO_SE {
       return next_;
@@ -596,7 +627,7 @@ class MemoryPool : private Uncopyable {
 
 
     /**
-     * Append MemoryPool::LocalArena to next link.
+     * Append Regions::LocalArena to next link.
      * @param An arena which want to connect.
      */
     RASP_INLINE void set_next(LocalArena* arena) RASP_NOEXCEPT {
@@ -629,19 +660,29 @@ class MemoryPool : private Uncopyable {
     }
 
 
-    RASP_INLINE FreeChunkList* free_chunk_list(int index) {
+    RASP_INLINE FreeChunkStack* free_chunk_stack(int index) {
       if (index <= kMaxSmallObjectsCount) {
-        return free_chunk_list_ + index;
+        return &(free_chunk_stack_[index]);
       }
-      return InitHugeFreeChunkList(index);
+      return InitHugeFreeChunkStack(index);
+    }
+
+
+    RASP_INLINE FreeChunkStack* free_chunk_stack() RASP_NOEXCEPT {
+      return free_chunk_stack_;
+    }
+
+
+    RASP_INLINE HugeChunkMap* huge_free_chunk_map() RASP_NOEXCEPT {
+      return &huge_free_chunk_map_;
     }
 
 
     RASP_INLINE bool has_free_chunk(int index) {
       if (index <= kMaxSmallObjectsCount) {
-        return (free_chunk_list_ + index)->has_head();
+        return free_chunk_stack_[index].has_head();
       }
-      return HasHugeFreeChunkList(index);
+      return HasHugeFreeChunkStack(index);
     }
 
 
@@ -649,13 +690,13 @@ class MemoryPool : private Uncopyable {
      * Find the most nearly size block from free list if size class is 0.
      * @param size Need
      */
-    MemoryPool::MemoryBlock* FindFreeBlockFromHugeMap(int index) RASP_NOEXCEPT;
+    Regions::Header* FindFreeBlockFromHugeMap(int index) RASP_NOEXCEPT;
 
 
-    MemoryPool::FreeChunkList* InitHugeFreeChunkList(int index);
+    Regions::FreeChunkStack* InitHugeFreeChunkStack(int index);
 
 
-    bool HasHugeFreeChunkList(int index);
+    bool HasHugeFreeChunkStack(int index);
 
 
     Mmap* allocator() RASP_NOEXCEPT {
@@ -664,7 +705,7 @@ class MemoryPool : private Uncopyable {
 
 
     /**
-     * Add The MemoryPool::LocalArena to free list of The MemoryPool::CentralArena.
+     * Add The Regions::LocalArena to free list of The Regions::CentralArena.
      */
     RASP_INLINE void Return();
    private:
@@ -672,9 +713,8 @@ class MemoryPool : private Uncopyable {
     std::atomic_flag lock_;
     Mmap mmap_;
     ChunkList chunk_list_;
-    FreeChunkList* free_chunk_list_;
+    FreeChunkStack free_chunk_stack_[kMaxSmallObjectsCount];
     HugeChunkMap huge_free_chunk_map_;
-    Byte free_chunk_list_heap_[sizeof(FreeChunkList) * (kMaxSmallObjectsCount + 1)];
     LocalArena* next_;
   };
   
@@ -682,10 +722,6 @@ class MemoryPool : private Uncopyable {
   // The chunk list.
   CentralArena* central_arena_;
   LazyInitializer<CentralArena> central_arena_once_init_;
-
-
-  MemoryBlock* dealloced_head_;
-  MemoryBlock* current_dealloced_;
   
 
   size_t size_;
@@ -697,5 +733,5 @@ class MemoryPool : private Uncopyable {
 } // namesapce rasp
 
 
-#include "memorypool-inl.h"
+#include "regions-inl.h"
 #endif
