@@ -16,3 +16,4 @@ gyp-mac-tool
 .config.tmp
 Debug
 Release
+ipch
