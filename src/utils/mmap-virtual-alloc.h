@@ -44,8 +44,8 @@ class MapAllocator : private Static {
   }
 
 
-  static RASP_INLINE void Deallocate(void* area) {
-    VirtualFree(area, 1, MEM_DECOMMIT);
+  static RASP_INLINE void Deallocate(void* area, size_t size) {
+    VirtualFree(area, size, MEM_DECOMMIT);
   }
 };
 

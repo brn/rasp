@@ -28,6 +28,11 @@
 
 #include <atomic>
 #include "systeminfo.h"
+#include "spinlock.h"
+
+namespace {
+static const size_t kDefaultByte = rasp::SystemInfo::GetPageSize();
+}
 
 namespace rasp {
 class Mmap {
@@ -56,6 +61,7 @@ class Mmap {
   RASP_INLINE void UnCommit();
   RASP_INLINE uint64_t commited_size() RASP_NO_SE;
   RASP_INLINE uint64_t real_commited_size() RASP_NO_SE;
+  
 
   template <class T>
   class MmapStandardAllocator {
@@ -141,7 +147,97 @@ class Mmap {
   };
   
  private:
-  InternalMmap* mmap_;
+  class InternalMmap {
+   private:
+  
+    class Header {
+     public:
+      RASP_INLINE Header* ToNextPtr() RASP_NO_SE {
+        return next_;
+      }
+
+
+      RASP_INLINE void set_next(Header* byte) RASP_NOEXCEPT {
+        next_ = byte;
+      }
+
+
+      RASP_INLINE Byte* ToValue() RASP_NO_SE {
+        return ToBegin() + sizeof(Header);
+      }
+  
+
+      RASP_INLINE Byte* ToBegin() RASP_NO_SE {
+        return reinterpret_cast<Byte*>(const_cast<Header*>(this));
+      }
+
+
+      RASP_INLINE size_t size() RASP_NO_SE {
+        return size_;
+      }
+
+
+      RASP_INLINE void set_size(size_t size) RASP_NOEXCEPT {
+        size_ = size;
+      }
+
+     private:
+      Header* next_;
+      size_t size_;
+    };
+
+  
+   public:
+    RASP_INLINE InternalMmap():
+        current_map_size_(kDefaultByte),
+        used_(0u),
+        heap_(nullptr),
+        current_(nullptr),
+        last_(nullptr),
+        commited_(0),
+        real_(0){
+      lock_.clear();
+    }
+
+
+    ~InternalMmap() = default;
+
+
+    RASP_INLINE uint64_t commited() RASP_NO_SE {
+      return commited_;
+    }
+
+
+    RASP_INLINE uint64_t real_commited() RASP_NO_SE {
+      return real_;
+    }
+  
+  
+    RASP_INLINE void* Commit(size_t size);
+
+
+    RASP_INLINE void UnCommit();
+
+   private:
+  
+    RASP_INLINE void* Alloc(size_t size);
+
+
+    RASP_INLINE void* AddHeader(void* heap, size_t size);
+  
+
+    SpinLock spin_lock_;
+    std::atomic_flag lock_;
+    size_t current_map_size_;
+    size_t used_;
+    void* heap_;
+    void* current_;
+    Header* last_;
+    uint64_t commited_;
+    uint64_t real_;
+  };
+  
+  InternalMmap mmap_;
   std::atomic_flag uncommited_;
 };
 

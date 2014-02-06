@@ -53,8 +53,8 @@ class MapAllocator : private Static {
   }
 
 
-  static RASP_INLINE void Deallocate(void* area) {
-    munmap(area, 1);
+  static RASP_INLINE void Deallocate(void* area, size_t size) {
+    munmap(area, size);
   }
 };
 

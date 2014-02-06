@@ -75,10 +75,10 @@ namespace rasp {
 #endif
 
 
-RASP_INLINE void Assert__(bool ok, const char* result, const char* expect, const char* file, int line, const char* function, const std::string& message) {
+RASP_INLINE void Assert__(bool ok, const char* result, const char* expect, const char* file, int line, const char* function) {
   if (!ok) {
-    FPrintf(stderr, "assertion failed -> %s == %s\n in file %s at line %d\nIn function %s\n%s\n",
-            result, expect, file, line, function, message.c_str());
+    FPrintf(stderr, "assertion failed -> %s == %s\n in file %s at line %d\nIn function %s\n",
+            result, expect, file, line, function);
     abort();
   }
 }
@@ -93,15 +93,13 @@ RASP_INLINE void Fatal__(const char* file, int line, const char* function, const
 
 // ASSERT macro definition.
 #ifdef DEBUG
-#define ASSERT(expect, result) Assert__(result == expect, #result, #expect, __FILE__, __LINE__, __PRETTY_FUNCTION__, "")
-#define ASSERT_MESSAGE(expect, result, message) Assert__(result == expect, #result, #expect, __FILE__, __LINE__, __PRETTY_FUNCTION__, std::string(message))
+#define ASSERT(expect, result) Assert__(result == expect, #result, #expect, __FILE__, __LINE__, __PRETTY_FUNCTION__)
 #elif defined(NDEBUG) || !defined(DEBUG)
 #define ASSERT(expect, result)
-#define ASSERT_MESSAGE(expect, result, message)
 #endif
 
 
-#define RASP_CHECK(expect, result, ...) Assert__(result == expect, #result, #expect, __FILE__, __LINE__, __PRETTY_FUNCTION__, std::string(__VA_ARGS__))
+#define RASP_CHECK(expect, result) Assert__(result == expect, #result, #expect, __FILE__, __LINE__, __PRETTY_FUNCTION__)
 
 // ASSERT macro definition end.
 
