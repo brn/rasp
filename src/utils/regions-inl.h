@@ -161,7 +161,7 @@ void* Regions::AllocateArray(size_t size) {
 }
 
 
-void Regions::DestructFreeHeader(Regions::Header* header) {
+void Regions::DestructRegionalObject(Regions::Header* header) {
   if (!header->IsMarkedAsArray()) {
     header->ToValue()->~RegionalObject();
   } else {
@@ -269,21 +269,28 @@ void Regions::CentralArena::FreeArena(Regions::LocalArena* arena) {
       central_free_chunk->Unshift(free_header->ToHeader());
       free_header = next;
     }
-    free_chunk_stack[i].Reset();
+    free_chunk_stack[i].Clear();
   }
-  HugeChunkMap* map = arena->huge_free_chunk_map();
-  huge_free_chunk_map_->insert(map->begin(), map->end());
+
+  FreeMap(arena);
   arena->ReleaseLock();
-  //printf("ReleaseLock addr: %p thread: %zu\n", arena, std::hash<std::thread::id>()(std::this_thread::get_id()));
 }
 
 
-Regions::Header* Regions::CentralArena::FindFreeChunk(size_t size) RASP_NOEXCEPT {
+void Regions::CentralArena::FreeMap(Regions::LocalArena* arena) {
+  //ScopedSpinLock lock(map_lock_);
+  HugeChunkMap* map = arena->huge_free_chunk_map();
+  huge_free_chunk_map_->insert(map->begin(), map->end());
+  map->clear();
+}
+
+
+Regions::Header* Regions::CentralArena::FindFreeChunk(size_t size) {
   int index = FindBestFitBlockIndex(size);
   ScopedSpinLock lock(free_lock_);
   Header* ret = nullptr;
   
-  if (index < kMaxSmallObjectsCount && central_free_chunk_stack_[index].has_head()) {
+  if (index < kMaxSmallObjectsCount && central_free_chunk_stack_[index].HasHead()) {
     ret = central_free_chunk_stack_[index].Shift();
   } else if (huge_free_chunk_map_->count(index) > 0) {
     ret = huge_free_chunk_map_->operator[](index)->Shift();
@@ -293,13 +300,13 @@ Regions::Header* Regions::CentralArena::FindFreeChunk(size_t size) RASP_NOEXCEPT
 };
 
 
-inline int Regions::CentralArena::FindBestFitBlockIndex(size_t size) {
+inline int Regions::CentralArena::FindBestFitBlockIndex(size_t size) RASP_NOEXCEPT {
   RASP_CHECK(true, size > 0);
   return (size / kAlignment) - 1;
 }
 
 
-Regions::LocalArena* Regions::CentralArena::FindUnlockedArena() {
+Regions::LocalArena* Regions::CentralArena::FindUnlockedArena() RASP_NOEXCEPT {
   LocalArena* arena = arena_head_;
   while (arena != nullptr) {
     if (arena->AcquireLock()) {
@@ -336,7 +343,7 @@ Regions::LocalArena* Regions::CentralArena::TlsAlloc() {
 }
 
 
-void Regions::CentralArena::StoreNewLocalArena(Regions::LocalArena* arena) {
+void Regions::CentralArena::StoreNewLocalArena(Regions::LocalArena* arena) RASP_NOEXCEPT {
   ScopedSpinLock lock(tree_lock_);
   if (arena_head_ == nullptr) {
     arena_head_ = arena_tail_ = arena;
@@ -390,9 +397,7 @@ Regions::LocalArena::~LocalArena() {}
 
 
 void Regions::LocalArena::Return() {
-  central_arena_->AcquireFreeSpinLock();
   central_arena_->FreeArena(this);
-  central_arena_->ReleaseFreeSpinLock();
 }
 // LocalArena inline end
 

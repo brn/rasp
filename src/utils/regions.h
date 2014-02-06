@@ -273,7 +273,7 @@ class Regions : private Uncopyable {
   /**
    * Destruct RegionalObject class instance by the proper method.
    */
-  RASP_INLINE static void DestructFreeHeader(Regions::Header* header);
+  RASP_INLINE static void DestructRegionalObject(Regions::Header* header);
 
 
   /**
@@ -455,7 +455,7 @@ class Regions : private Uncopyable {
     RASP_INLINE Regions::Header* Shift() RASP_NOEXCEPT;
 
 
-    RASP_INLINE bool has_head() RASP_NO_SE {
+    RASP_INLINE bool HasHead() RASP_NO_SE {
       return free_head_ != nullptr;
     }
 
@@ -465,7 +465,7 @@ class Regions : private Uncopyable {
     }
 
 
-    RASP_INLINE void Reset() RASP_NOEXCEPT {
+    RASP_INLINE void Clear() RASP_NOEXCEPT {
       free_head_ = nullptr;
     }
     
@@ -509,33 +509,27 @@ class Regions : private Uncopyable {
     /**
      * Remove all arena.
      */
-    void Destroy();
+    void Destroy() RASP_NOEXCEPT;
 
 
     /**
      * Deallocate specified ptr.
      * @param object The object which want to deallocate.
      */
-    void Dealloc(void* object);
+    void Dealloc(void* object) RASP_NOEXCEPT;
 
 
     /**
      * Unlock arena.
      * @param arena The arena which want to unlock.
      */
-    RASP_INLINE void FreeArena(Regions::LocalArena* arena);
+    inline void FreeArena(Regions::LocalArena* arena);
 
 
-    RASP_INLINE void AcquireFreeSpinLock() RASP_NOEXCEPT {
-      free_lock_.lock();
-    }
+    inline void FreeMap(Regions::LocalArena* arena);
 
 
-    RASP_INLINE void ReleaseFreeSpinLock() RASP_NOEXCEPT {
-      free_lock_.unlock();
-    }
-
-    inline Regions::Header* FindFreeChunk(size_t size) RASP_NOEXCEPT;
+    inline Regions::Header* FindFreeChunk(size_t size);
     
    private:
 
@@ -544,22 +538,13 @@ class Regions : private Uncopyable {
      * Return index of chunk list which fit to given size.
      * @param size Need size.
      */
-    inline int FindBestFitBlockIndex(size_t size);
+    inline int FindBestFitBlockIndex(size_t size) RASP_NOEXCEPT;
 
 
     /**
      * Find out arena which was unlocked.
      */
-    inline LocalArena* FindUnlockedArena();
-    
-
-    /**
-     * Initialize chunk.
-     * @param size Need size.
-     * @param default_size Default chunk size.
-     * @param index The class of arena.
-     */
-    RASP_INLINE Regions::LocalArena* InitChunk(size_t size, size_t default_size, int index);
+    inline LocalArena* FindUnlockedArena() RASP_NOEXCEPT;
 
 
     /**
@@ -573,10 +558,15 @@ class Regions : private Uncopyable {
      * Add an arena to linked list.
      * @param arena The arena which want to connect.
      */
-    inline void StoreNewLocalArena(Regions::LocalArena* arena);
+    inline void StoreNewLocalArena(Regions::LocalArena* arena) RASP_NOEXCEPT;
 
 
-    void IterateChunkList(Regions::ChunkList*);
+    void IterateChunkList(Regions::ChunkList*) RASP_NOEXCEPT;
+
+
+    inline static void TlsFree(void* arena) RASP_NOEXCEPT {
+      reinterpret_cast<Regions::LocalArena*>(arena)->Return();
+    }
     
 
     LocalArena* arena_head_;
@@ -585,22 +575,17 @@ class Regions : private Uncopyable {
     Mmap* mmap_;
     Regions::FreeChunkStack central_free_chunk_stack_[kMaxSmallObjectsCount];
     HugeChunkAllocator* huge_chunk_allocator_;
+    LazyInitializer<HugeChunkAllocator> huge_chunk_allocator_once_init_;
     HugeChunkMap* huge_free_chunk_map_;
     LazyInitializer<HugeChunkMap> huge_free_chunk_map_once_init_;
-    LazyInitializer<HugeChunkAllocator> huge_chunk_allocator_once_init_;
+    ThreadLocalStorage::Slot* tls_;
+    LazyInitializer<ThreadLocalStorage::Slot> tls_once_init_;
+
     SpinLock lock_;
     SpinLock dealloc_lock_;
     SpinLock tree_lock_;
     SpinLock free_lock_;
-    ThreadLocalStorage::Slot* tls_;
-    LazyInitializer<ThreadLocalStorage::Slot> tls_once_init_;
-    
-    
-    static const int kSmallMax = 3 KB;
-
-    static inline void TlsFree(void* arena) {
-      reinterpret_cast<Regions::LocalArena*>(arena)->Return();
-    }
+    SpinLock map_lock_;
   };
   
 
@@ -655,12 +640,12 @@ class Regions : private Uncopyable {
      * Get chunk.
      * @return Specific class chunk list.
      */
-    RASP_INLINE ChunkList* chunk_list() {
+    RASP_INLINE ChunkList* chunk_list() RASP_NOEXCEPT {
       return &chunk_list_;
     }
 
 
-    RASP_INLINE FreeChunkStack* free_chunk_stack(int index) {
+    RASP_INLINE FreeChunkStack* free_chunk_stack(int index) RASP_NOEXCEPT {
       if (index <= kMaxSmallObjectsCount) {
         return &(free_chunk_stack_[index]);
       }
@@ -678,9 +663,9 @@ class Regions : private Uncopyable {
     }
 
 
-    RASP_INLINE bool has_free_chunk(int index) {
+    RASP_INLINE bool has_free_chunk(int index) RASP_NOEXCEPT {
       if (index <= kMaxSmallObjectsCount) {
-        return free_chunk_stack_[index].has_head();
+        return free_chunk_stack_[index].HasHead();
       }
       return HasHugeFreeChunkStack(index);
     }

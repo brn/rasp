@@ -68,7 +68,7 @@ void Regions::Chunk::Destruct() {
   while (1) {
     bool exit = IsTail(header->ToBegin());
     if (!header->IsMarkedAsDealloced()) {
-      DestructFreeHeader(header);
+      DestructRegionalObject(header);
     }
     if (exit) {
       break;
@@ -106,7 +106,7 @@ bool Regions::LocalArena::HasHugeFreeChunkStack(int index) {
 }
 
 
-void Regions::CentralArena::Destroy() {
+void Regions::CentralArena::Destroy() RASP_NOEXCEPT {
   LocalArena* arena = arena_head_;
   while (arena != nullptr) {
     auto chunk_list = arena->chunk_list();
@@ -117,7 +117,7 @@ void Regions::CentralArena::Destroy() {
 }
 
 
-void Regions::CentralArena::IterateChunkList(Regions::ChunkList* chunk_list) {
+void Regions::CentralArena::IterateChunkList(Regions::ChunkList* chunk_list) RASP_NOEXCEPT {
   if (chunk_list->head() != nullptr) {
     auto chunk = chunk_list->head();
     while (chunk != nullptr) {
@@ -130,13 +130,13 @@ void Regions::CentralArena::IterateChunkList(Regions::ChunkList* chunk_list) {
 }
 
 
-void Regions::CentralArena::Dealloc(void* object) {
+void Regions::CentralArena::Dealloc(void* object) RASP_NOEXCEPT {
   ScopedSpinLock lock(dealloc_lock_);
   Byte* block = reinterpret_cast<Byte*>(object);
   block -= Regions::kHeaderSize;
   Regions::Header* header = reinterpret_cast<Regions::Header*>(block);
   RASP_CHECK(true, !header->IsMarkedAsDealloced());
-  DestructFreeHeader(header);
+  DestructRegionalObject(header);
   header->MarkAsDealloced();
   ASSERT(true, header->IsMarkedAsDealloced());
   int index = FindBestFitBlockIndex(header->size());

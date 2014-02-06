@@ -287,7 +287,7 @@ TEST_F(RegionsTest, RegionsTest_thread) {
     threads.push_back(th);
   }
   LOOP_FOR_THREAD_SIZE {
-    threads[i]->detach();
+    threads[i]->join();
     delete threads[i];
   }
 
