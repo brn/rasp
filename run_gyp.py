@@ -241,6 +241,13 @@ def BuildConfig(args) :
   ], 'noexcept is required.')
   builder.CheckStruct(False, [
     {
+      'name': 'vm_protect',
+      'header' : ['mach/mach.h'],
+      'function': 'vm_protect'
+    }
+  ], 'vm_protect is required.')
+  builder.CheckStruct(False, [
+    {
       'name': 'VM_MAKE_TAG',
       'header' : ['mach/vm_statistics.h'],
       'code': '''

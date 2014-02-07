@@ -47,46 +47,6 @@ class Regions;
 class RegionalObject {
  public:
   /**
-   * Create object from Regions allocated memory.
-   * The object created by this operator new must not delete or free.
-   * If you want to delete object call Regions::Dealloc(void*).
-   */
-  inline void* operator new (size_t size, Regions* pool);
-
-
-  /**
-   * Create array of object from Regions allocated memory.
-   * The object created by this operator new must not delete or free.
-   * If you want to delete object call Regions::Dealloc(void*).
-   */
-  inline void* operator new[] (size_t size, Regions* pool);
-
-
-  /**
-   * DO NOT USE.
-   */
-  inline void operator delete (void* ptr){UNREACHABLE;};
-
-
-  /**
-   * Used internally.
-   */
-  inline void operator delete[] (void* ptr){};
-
-
-  /**
-   * Called auto by system if operator new(void*, Regions*) failed.
-   */
-  inline void operator delete (void* ptr, Regions* pool){};
-
-  
-  /**
-   * Called auto by system if operator new[](void*, Regions*) failed.
-   */
-  inline void operator delete[] (void* ptr, Regions* pool){};
-
-
-  /**
    * virtual destructor.
    */
   virtual ~RegionalObject() {}
@@ -109,9 +69,6 @@ class RegionalObject {
  * // that called in Regions destructor.
  */
 class Regions : private Uncopyable {
-  // Only RegionalObject derived class can call
-  // Regions::Allocate(size_t) or Regions::AllocateArray(size_t).
-  friend class RegionalObject;
  private:
   class Chunk;
   class FreeHeader;
@@ -187,6 +144,24 @@ class Regions : private Uncopyable {
    */
   RASP_INLINE void Dealloc(void* object) RASP_NOEXCEPT;
 
+
+  /**
+   * Create new instance from Regions heap.
+   * The instance which created by this method
+   * must not use delete or free.
+   */
+  template <typename T, typename ... Args>
+  RASP_INLINE T* New(Args ... args);
+
+
+  /**
+   * Create new array of instance from Regions heap.
+   * The instance which created by this method
+   * must not use delete or free.
+   */
+  template <typename T, typename ... Args>
+  inline T* NewArray(size_t size, Args ... args);
+  
 
   /**
    * Get current allocated size by byte.

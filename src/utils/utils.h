@@ -93,18 +93,18 @@ RASP_INLINE void Fatal__(const char* file, int line, const char* function, const
 
 // ASSERT macro definition.
 #ifdef DEBUG
-#define ASSERT(expect, result) Assert__(result == expect, #result, #expect, __FILE__, __LINE__, __PRETTY_FUNCTION__)
+#define ASSERT(expect, result) rasp::Assert__(result == expect, #result, #expect, __FILE__, __LINE__, __PRETTY_FUNCTION__)
 #elif defined(NDEBUG) || !defined(DEBUG)
 #define ASSERT(expect, result)
 #endif
 
 
-#define RASP_CHECK(expect, result) Assert__(result == expect, #result, #expect, __FILE__, __LINE__, __PRETTY_FUNCTION__)
+#define RASP_CHECK(expect, result) rasp::Assert__(result == expect, #result, #expect, __FILE__, __LINE__, __PRETTY_FUNCTION__)
 
 // ASSERT macro definition end.
 
 
-#define FATAL(msg) {std::stringstream err_stream__;err_stream__ << msg;Fatal__(__FILE__, __LINE__, __PRETTY_FUNCTION__, err_stream__.str());}
+#define FATAL(msg) {std::stringstream err_stream__;err_stream__ << msg;rasp::Fatal__(__FILE__, __LINE__, __PRETTY_FUNCTION__, err_stream__.str());}
 
 #define UNREACHABLE FATAL("UNREACHABLE CODE ACCESSED.")
 

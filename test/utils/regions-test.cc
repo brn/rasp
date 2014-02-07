@@ -104,17 +104,26 @@ class Deletable : public rasp::RegionalObject  {
 
 class Array : public rasp::RegionalObject {
  public:
-  bool* ok;
-  ~Array() {(*ok) = true;}
+  uint64_t* ok;
+  ~Array() {(*ok)++;}
 };
 
 
 TEST_F(RegionsTest, RegionsTest_allocate_from_chunk) {
   uint64_t ok = 0u;
   rasp::Regions p(1024);
-  new(&p) Test1(&ok);
+  p.New<Test1>(&ok);
   p.Destroy();
   ASSERT_EQ(ok, 1u);
+}
+
+
+TEST_F(RegionsTest, RegionsTest_allocate_from_chunk_array) {
+  uint64_t ok = 0u;
+  rasp::Regions p(1024);
+  p.NewArray<Test1>(kSize, &ok);
+  p.Destroy();
+  ASSERT_EQ(kSize, ok);
 }
 
 
@@ -122,7 +131,7 @@ TEST_F(RegionsTest, RegionsTest_allocate_many_from_chunk) {
   rasp::Regions p(1024);
   uint64_t ok = 0u;
   for (uint64_t i = 0u; i < kSize; i++) {
-    new(&p) Test1(&ok);
+    p.New<Test1>(&ok);
   }
   p.Destroy();
   ASSERT_EQ(kSize, ok);
@@ -140,11 +149,11 @@ TEST_F(RegionsTest, RegionsTest_allocate_many_from_chunk_random) {
     int t = s % 3 == 0;
     int f = s % 5 == 0;
     if (t) {
-      new(&p) Test1(&ok);
+      p.New<Test1>(&ok);
     } else if (f) {
-      new(&p) Test2(&ok);
+      p.New<Test2>(&ok);
     } else {
-      new(&p) Test3(&ok);
+      p.New<Test3>(&ok);
     }
   }
   p.Destroy();
@@ -156,7 +165,7 @@ TEST_F(RegionsTest, RegionsTest_allocate_many_from_chunk_and_dealloc) {
   uint64_t ok = 0u;
   rasp::Regions p(1024);
   for (uint64_t i = 0u; i < kSize; i++) {
-    Test1* t = new(&p) Test1(&ok);
+    Test1* t = p.New<Test1>(&ok);
     p.Dealloc(t);
   }
   p.Destroy();
@@ -184,11 +193,11 @@ TEST_F(RegionsTest, RegionsTest_allocate_many_from_chunk_random_and_dealloc) {
     }
     
     if (t) {
-      last = new(&p) Test1(&ok);
+      last = p.New<Test1>(&ok);
     } else if (f) {
-      last = new(&p) Test2(&ok);
+      last = p.New<Test2>(&ok);
     } else {
-      last = new(&p) Test3(&ok);
+      last = p.New<Test3>(&ok);
     }
   }
   p.Destroy();
@@ -199,7 +208,7 @@ TEST_F(RegionsTest, RegionsTest_allocate_many_from_chunk_random_and_dealloc) {
 TEST_F(RegionsTest, RegionsTest_allocate_big_object) {
   uint64_t ok = 0u;
   rasp::Regions p(8);
-  new(&p) LargeObject(&ok);
+  p.New<LargeObject>(&ok);
   p.Destroy();
   ASSERT_EQ(ok, 1u);
 }
@@ -210,7 +219,7 @@ TEST_F(RegionsTest, RegionsTest_allocate_many_big_object) {
   uint64_t ok = 0u;
   rasp::Regions p(8);
   for (uint64_t i = 0u; i < kSize; i++) {
-    new(&p) LargeObject(&ok);
+    p.New<LargeObject>(&ok);
   }
   p.Destroy();
   ASSERT_EQ(kSize, ok);
@@ -222,7 +231,7 @@ TEST_F(RegionsTest, RegionsTest_allocate_many_big_object_and_dealloc) {
   uint64_t ok = 0u;
   rasp::Regions p(8);
   for (uint64_t i = 0u; i < kSize; i++) {
-    auto t = new(&p) LargeObject(&ok);
+    auto t = p.New<LargeObject>(&ok);
     p.Dealloc(t);
   }
   p.Destroy();
@@ -236,7 +245,7 @@ TEST_F(RegionsTest, RegionsTest_performance1) {
   uint64_t ok = 0u;
   Test1* stack[kSize];
   for (uint64_t i = 0u; i < kSize; i++) {
-    stack[i] = new(&p) Test1(&ok);
+    stack[i] = p.New<Test1>(&ok);
   }
   p.Destroy();
   ASSERT_EQ(kSize, ok);
@@ -276,7 +285,7 @@ TEST_F(RegionsTest, RegionsTest_thread) {
   
   auto fn = [&]() {
     for (uint64_t i = 0u; i < kSize; i++) {
-      new(&p) Test1(&ok);
+      p.New<Test1>(&ok);
     }
     index++;
   };
@@ -346,11 +355,11 @@ TEST_F(RegionsTest, RegionsTest_thread_random) {
       int t = s % 3 == 0;
       int f = s % 5 == 0;
       if (t) {
-        new(&p) Test1(&ok);
+        p.New<Test1>(&ok);
       } else if (f) {
-        new(&p) Test2(&ok);
+        p.New<Test2>(&ok);
       } else {
-        new(&p) Test3(&ok);
+        p.New<Test3>(&ok);
       }
     }
     index++;
@@ -400,11 +409,11 @@ TEST_F(RegionsTest, RegionsTest_thread_random_dealloc) {
       }
     
       if (t) {
-        last = new(&p) Test1(&ok);
+        last = p.New<Test1>(&ok);
       } else if (f) {
-        last = new(&p) Test2(&ok);
+        last = p.New<Test2>(&ok);
       } else {
-        last = new(&p) Test3(&ok);
+        last = p.New<Test3>(&ok);
       }
     }
     index++;

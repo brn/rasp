@@ -46,7 +46,7 @@ class Regions::Header {
    * @return block size except header.
    */
   RASP_INLINE size_t size() RASP_NOEXCEPT {
-    return (*reinterpret_cast<size_t*>(ToBegin())) & kTagRemoveBit;
+    return size_ & kTagRemoveBit;
   }
 
 
@@ -55,8 +55,11 @@ class Regions::Header {
    * @param size Block size which except header.
    */
   RASP_INLINE void set_size(size_t size) RASP_NOEXCEPT {
-    size_t* size_bit = reinterpret_cast<size_t*>(ToBegin());
-    *size_bit = size;
+    bool array = IsMarkedAsArray();
+    bool dealloced = IsMarkedAsDealloced();
+    size_ = size;
+    if (array) MarkAsArray();
+    if (dealloced) MarkAsDealloced();
   }
   
 
@@ -191,22 +194,6 @@ class Regions::FreeHeader {
 
 
 /**
- * placement new.
- */
-inline void* RegionalObject::operator new(size_t size, Regions* pool) {
-  return pool->Allocate(size);
-}
-
-
-/**
- * placement new(array)
- */
-inline void* RegionalObject::operator new[](size_t size, Regions* pool) {
-  return pool->AllocateArray(size);
-}
-
-
-/**
  * Destroy all allocated chunks.
  */
 void Regions::Destroy() RASP_NOEXCEPT {
@@ -228,6 +215,44 @@ void Regions::Dealloc(void* object) RASP_NOEXCEPT {
 }
 
 
+template <typename T, typename ... Args>
+T* Regions::New(Args ... args) {
+  static_assert(std::is_base_of<RegionalObject, T>::value == true,
+                "The type argument of the rasp::Reigons::New must be derived class of rasp::RegionalObject.");
+  return new(Allocate(sizeof(T))) T(args...);
+}
+
+
+template <typename T, typename ... Args>
+T* Regions::NewArray(size_t size, Args ... args) {
+  static_assert(std::is_base_of<RegionalObject, T>::value == true,
+                "The type argument of the rasp::Reigons::New must be derived class of rasp::RegionalObject.");
+  RASP_CHECK(true, size > 0);
+
+  // In case of array, we allocate extra space which holds array size and each type size.
+  size_t alloc_size = RASP_ALIGN_OFFSET(((sizeof(T) * size) + (kSizeTSize * 2)), kAlignment);
+  Byte* area = reinterpret_cast<Byte*>(AllocateArray(alloc_size));
+
+  // The size of array.
+  size_t* size_ptr = reinterpret_cast<size_t*>(area);
+  *size_ptr = size;
+
+  // The value of sizeof(T)
+  size_t* object_size = reinterpret_cast<size_t*>(area + kSizeTSize);
+  *object_size = sizeof(T);
+
+  // Rest is object heap.
+  T* array_zone = reinterpret_cast<T*>(area + (kSizeTSize * 2));
+  
+  // initialize one by one.
+  for (unsigned i = 0u; i < size; i++) {
+    new(array_zone + i) T(args...);
+  }
+  return array_zone;
+}
+
+
+
 /**
  * Allocate memory block from pool.
  * @param size The size which want to allocate.
@@ -247,6 +272,7 @@ void* Regions::Allocate(size_t size) {
 void* Regions::AllocateArray(size_t size) {
   Header* header = DistributeBlock(size);
   header->MarkAsArray();
+  ASSERT(true, header->IsMarkedAsArray());
   return header->ToValue<void>();
 }
 
@@ -259,8 +285,16 @@ void Regions::DestructRegionalObject(Regions::Header* header) {
   if (!header->IsMarkedAsArray()) {
     header->ToValue()->~RegionalObject();
   } else {
-    // We call operator delete[] if object is allocated as array.
-    delete[] header->ToValue();
+    // case array.
+    Byte* area = header->ToValue<Byte*>();
+    // Get the array size from embedded size bit.
+    size_t array_size = *reinterpret_cast<size_t*>(area);
+    // Get the type size from embedded size bit.
+    size_t object_size = *reinterpret_cast<size_t*>(area + kSizeTSize);
+    Byte* array_zone = reinterpret_cast<Byte*>(area + (kSizeTSize * 2));
+    for (unsigned i = 0u; i < array_size; i++) {
+      reinterpret_cast<RegionalObject*>(array_zone + (object_size * i))->~RegionalObject();
+    }
   }
 }
 
@@ -331,7 +365,11 @@ inline Regions::Header* Regions::ChunkList::AllocChunkIfNecessary(size_t size, M
     if (header != nullptr) {
       return header;
     }
-    current_->set_next(Regions::Chunk::New(RASP_ALIGN_OFFSET((100 KB), kAlignment), mmap));
+    
+    static const size_t kHundredKilloByte = 100 KB;
+    size_t real_size = size + kValueOffset;
+    size_t alloc_size = kHundredKilloByte > real_size? kHundredKilloByte: real_size;
+    current_->set_next(Regions::Chunk::New(RASP_ALIGN_OFFSET(alloc_size, kAlignment), mmap));
     current_ = current_->next();
   }
   return current_->GetBlock(size);

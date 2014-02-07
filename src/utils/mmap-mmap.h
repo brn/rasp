@@ -38,6 +38,32 @@
 #endif
 
 
+#ifdef HAVE_VM_PROTECT
+#include <mach/mach.h>
+#include <mach/mach_traps.h>
+namespace rasp {
+RASP_INLINE void VmProtect(void* addr, size_t size) {
+  kern_return_t ret = vm_protect(
+      mach_task_self(),
+      reinterpret_cast<vm_address_t>(addr),
+      static_cast<vm_size_t>(size),
+      false,
+      VM_PROT_READ | VM_PROT_WRITE);
+  
+  if (ret == KERN_PROTECTION_FAILURE) {
+    FATAL("[mmap]Memory protection failed.");
+  } else if (ret == KERN_INVALID_ADDRESS) {
+    FATAL("[mmap]Memory address is invalid.");
+  }
+}
+}
+#else
+namespace rasp {
+RASP_INLINE void VmProtect(void* addr, size_t size) {}
+}
+#endif
+
+
 namespace rasp {
 
 class MapAllocator : private Static {

@@ -149,7 +149,8 @@
       }],
       ['OS=="mac"', {
         'defines': [
-          'PLATFORM_POSIX'
+          'PLATFORM_POSIX',
+          'PLATFORM_MACH'
         ],
         'xcode_settings': {
           'ALWAYS_SEARCH_USER_PATHS': 'YES',
