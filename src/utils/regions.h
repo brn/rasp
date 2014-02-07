@@ -28,12 +28,9 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <iostream>
 #include <unordered_map>
 #include <atomic>
 #include <new>
-#include <deque>
-#include <algorithm>
 #include "utils.h"
 #include "tls.h"
 #include "mmap.h"
@@ -520,15 +517,24 @@ class Regions : private Uncopyable {
 
 
     /**
-     * Unlock arena.
-     * @param arena The arena which want to unlock.
+     * Move all LocalArena free chunks to CentralArena free chunks,
+     * and unlock the LocalArena.
+     * @param arena The arena belong to thread which is exited.
      */
-    inline void FreeArena(Regions::LocalArena* arena);
+    inline void CollectGarbage(Regions::LocalArena* arena);
 
 
+    /**
+     * Move all LocalArena::HugeFreeChunkMap to CentralArena::HugeFreeChunkMap.
+     * @param arena The arena belong to thread which is exited.
+     */
     inline void FreeMap(Regions::LocalArena* arena);
 
 
+    /**
+     * Find central free chunk which best fit to the given size.
+     * @param size The size which want to allocate.
+     */
     inline Regions::Header* FindFreeChunk(size_t size);
     
    private:
@@ -536,7 +542,7 @@ class Regions : private Uncopyable {
 
     /**
      * Return index of chunk list which fit to given size.
-     * @param size Need size.
+     * @param size The size which want to allocate.
      */
     inline int FindBestFitBlockIndex(size_t size) RASP_NOEXCEPT;
 
@@ -574,19 +580,19 @@ class Regions : private Uncopyable {
 
     Mmap* mmap_;
     Regions::FreeChunkStack central_free_chunk_stack_[kMaxSmallObjectsCount];
+    
     HugeChunkAllocator* huge_chunk_allocator_;
     LazyInitializer<HugeChunkAllocator> huge_chunk_allocator_once_init_;
+    
     HugeChunkMap* huge_free_chunk_map_;
     LazyInitializer<HugeChunkMap> huge_free_chunk_map_once_init_;
+    
     ThreadLocalStorage::Slot* tls_;
     LazyInitializer<ThreadLocalStorage::Slot> tls_once_init_;
-
-    SpinLock lock_;
+    
+    SpinLock central_free_arena_lock_;
+    SpinLock central_huge_free_map_lock_;
     SpinLock dealloc_lock_;
-    SpinLock tree_lock_;
-    SpinLock free_lock_;
-    SpinLock map_lock_;
-    std::recursive_mutex mt_;
   };
   
 
@@ -682,10 +688,12 @@ class Regions : private Uncopyable {
     Regions::FreeChunkStack* InitHugeFreeChunkStack(int index);
 
 
-    bool HasHugeFreeChunkStack(int index);
+    RASP_INLINE bool HasHugeFreeChunkStack(int index) RASP_NOEXCEPT {
+      return huge_free_chunk_map_.count(index) != 0;
+    }
 
 
-    Mmap* allocator() RASP_NOEXCEPT {
+    RASP_INLINE Mmap* allocator() RASP_NOEXCEPT {
       return &mmap_;
     }
 

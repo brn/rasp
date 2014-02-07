@@ -101,11 +101,6 @@ Regions::FreeChunkStack* Regions::LocalArena::InitHugeFreeChunkStack(int index) 
 }
 
 
-bool Regions::LocalArena::HasHugeFreeChunkStack(int index) {
-  return huge_free_chunk_map_.count(index) != 0;
-}
-
-
 void Regions::CentralArena::Destroy() RASP_NOEXCEPT {
   LocalArena* arena = arena_head_;
   while (arena != nullptr) {
@@ -136,7 +131,7 @@ void Regions::CentralArena::Dealloc(void* object) RASP_NOEXCEPT {
   Byte* block = reinterpret_cast<Byte*>(object);
   block -= Regions::kHeaderSize;
   Regions::Header* header = reinterpret_cast<Regions::Header*>(block);
-  RASP_CHECK(true, !header->IsMarkedAsDealloced());
+  RASP_CHECK(false, header->IsMarkedAsDealloced());
   DestructRegionalObject(header);
   header->MarkAsDealloced();
   ASSERT(true, header->IsMarkedAsDealloced());

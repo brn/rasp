@@ -34,60 +34,105 @@
 
 namespace rasp {
 
+/**
+ * The header of allocated memory block.
+ * This area is used until destruct.
+ */
 class Regions::Header {
  public:
+
+  /**
+   * Return the size of block except header.
+   * @return block size except header.
+   */
   RASP_INLINE size_t size() RASP_NOEXCEPT {
     return (*reinterpret_cast<size_t*>(ToBegin())) & kTagRemoveBit;
   }
 
 
+  /**
+   * Set the block size which must be the value block size.
+   * @param size Block size which except header.
+   */
   RASP_INLINE void set_size(size_t size) RASP_NOEXCEPT {
     size_t* size_bit = reinterpret_cast<size_t*>(ToBegin());
     *size_bit = size;
   }
   
 
+  /**
+   * Return the front of memory block.
+   * @return The front of block.
+   */
   RASP_INLINE Byte* ToBegin() RASP_NOEXCEPT {
     return reinterpret_cast<Byte*>(this);
   }
 
 
+  /**
+   * Return Regions::FreeHeader.
+   * @return Regions::FreeHeader
+   */
   RASP_INLINE Regions::FreeHeader* ToFreeHeader() RASP_NOEXCEPT {
     return reinterpret_cast<FreeHeader*>(reinterpret_cast<Byte*>(this) + kHeaderSize);
   }
 
 
+  /**
+   * Return next block.
+   * This method simply advance pointer by the memory block size
+   * so it does not perform any check.
+   * @return Next block.
+   */
   RASP_INLINE Header* next_addr() RASP_NOEXCEPT {
     return reinterpret_cast<Header*>(ToValue<Byte*>() + size());
   }
 
 
+  /**
+   * Return value block.
+   */
   template <typename T = RegionalObject*>
   RASP_INLINE typename std::remove_pointer<T>::type* ToValue() RASP_NOEXCEPT {
     return reinterpret_cast<typename std::remove_pointer<T>::type*>(ToBegin() + kSizeTSize);
   }
 
 
+  /**
+   * Mark memory block as not used.
+   */
   RASP_INLINE void MarkAsDealloced() RASP_NOEXCEPT {
     size_ |= kDeallocedBit;
   }
 
 
+  /**
+   * Mark memory block used.
+   */
   RASP_INLINE void UnmarkDealloced() RASP_NOEXCEPT {
     size_ &= kDeallocedMask;
   }
 
 
+  /**
+   * Return this memory block is marked as not used.
+   */
   RASP_INLINE bool IsMarkedAsDealloced() RASP_NOEXCEPT {
     return (size_ & kDeallocedBit) == kDeallocedBit;
   }
 
 
+  /**
+   * Mark this memory block allocated as array.
+   */
   RASP_INLINE void MarkAsArray() RASP_NOEXCEPT {
     size_ |= kArrayBit;
   }
 
 
+  /**
+   * Return this memory block allocated as array.
+   */
   RASP_INLINE bool IsMarkedAsArray() RASP_NOEXCEPT {
     return (size_ & kArrayBit) == kArrayBit;
   }
@@ -97,24 +142,43 @@ class Regions::Header {
 };
 
 
+/**
+ * This header that is only available if memory block is not used is
+ * record the next pointer of the free list.
+ * In used block this header area is used as a user allocation block.
+ */
 class Regions::FreeHeader {
  public:    
 
+  /**
+   * Return next FreeHeader in the free list.
+   * @return next FreeHeader in the free list.
+   */
   RASP_INLINE FreeHeader* ToNextPtr() RASP_NOEXCEPT {
     return reinterpret_cast<FreeHeader*>(next_);
   }
 
 
+  /**
+   * Set next ptr.
+   */
   RASP_INLINE void set_next_ptr(Byte* next_ptr) RASP_NOEXCEPT {
     next_ = next_ptr;
   }
 
 
+  /**
+   * Return front of FreeHeader.
+   */
   RASP_INLINE Byte* ToBegin() RASP_NOEXCEPT {
     return reinterpret_cast<Byte*>(this);
   }
 
 
+  /**
+   * Return the header of this memory block.
+   * @return The header of this memory block.
+   */
   RASP_INLINE Regions::Header* ToHeader() RASP_NOEXCEPT {
     return reinterpret_cast<Header*>(ToBegin() - kFreeHeaderSize);
   }
@@ -126,17 +190,27 @@ class Regions::FreeHeader {
 
 
 
+/**
+ * placement new.
+ */
 inline void* RegionalObject::operator new(size_t size, Regions* pool) {
   return pool->Allocate(size);
 }
 
 
+/**
+ * placement new(array)
+ */
 inline void* RegionalObject::operator new[](size_t size, Regions* pool) {
   return pool->AllocateArray(size);
 }
 
 
+/**
+ * Destroy all allocated chunks.
+ */
 void Regions::Destroy() RASP_NOEXCEPT {
+  // Check atomically.
   if (!deleted_.test_and_set()) {
     central_arena_->Destroy();
   }
@@ -144,16 +218,32 @@ void Regions::Destroy() RASP_NOEXCEPT {
 
 
 
+/**
+ * Release allocated memory block.
+ * @param object The pointer which returned from Regions::Allocate(size_t)
+ * or Regions::AllocateArray(size_t)
+ */
 void Regions::Dealloc(void* object) RASP_NOEXCEPT {
   central_arena_->Dealloc(object);
 }
 
 
+/**
+ * Allocate memory block from pool.
+ * @param size The size which want to allocate.
+ * @return Unused new memory block.
+ */
 void* Regions::Allocate(size_t size) {
   return DistributeBlock(size)->ToValue<void>();
 }
 
 
+/**
+ * Allocate memory block from pool.
+ * This method mark header as Array.
+ * @param size The size which want to allocate.
+ * @return Unused new memory block.
+ */
 void* Regions::AllocateArray(size_t size) {
   Header* header = DistributeBlock(size);
   header->MarkAsArray();
@@ -161,10 +251,15 @@ void* Regions::AllocateArray(size_t size) {
 }
 
 
+/**
+ * Destruct memory block by the proper method.
+ * @param header The memory block which want to destruct.
+ */
 void Regions::DestructRegionalObject(Regions::Header* header) {
   if (!header->IsMarkedAsArray()) {
     header->ToValue()->~RegionalObject();
   } else {
+    // We call operator delete[] if object is allocated as array.
     delete[] header->ToValue();
   }
 }
@@ -259,7 +354,7 @@ inline Regions::Header* Regions::CentralArena::Commit(size_t size, size_t defaul
 }
 
 
-void Regions::CentralArena::FreeArena(Regions::LocalArena* arena) {
+void Regions::CentralArena::CollectGarbage(Regions::LocalArena* arena) {
   FreeChunkStack* free_chunk_stack = arena->free_chunk_stack();
   for (int i = 0; i < kMaxSmallObjectsCount; i++) {
     FreeHeader* free_header = free_chunk_stack[i].head();
@@ -278,7 +373,7 @@ void Regions::CentralArena::FreeArena(Regions::LocalArena* arena) {
 
 
 void Regions::CentralArena::FreeMap(Regions::LocalArena* arena) {
-  ScopedSpinLock lock_(map_lock_);
+  ScopedSpinLock lock_(central_huge_free_map_lock_);
   HugeChunkMap* map = arena->huge_free_chunk_map();
   huge_free_chunk_map_->insert(map->begin(), map->end());
   map->clear();
@@ -287,10 +382,9 @@ void Regions::CentralArena::FreeMap(Regions::LocalArena* arena) {
 
 Regions::Header* Regions::CentralArena::FindFreeChunk(size_t size) {
   int index = FindBestFitBlockIndex(size);
-  ScopedSpinLock lock(free_lock_);
   Header* ret = nullptr;
   
-  if (index < kMaxSmallObjectsCount && central_free_chunk_stack_[index].HasHead()) {
+  if (index < kMaxSmallObjectsCount) {
     ret = central_free_chunk_stack_[index].Shift();
   } else if (huge_free_chunk_map_->count(index) > 0) {
     ret = huge_free_chunk_map_->operator[](index)->Shift();
@@ -310,7 +404,6 @@ Regions::LocalArena* Regions::CentralArena::FindUnlockedArena() RASP_NOEXCEPT {
   LocalArena* arena = arena_head_;
   while (arena != nullptr) {
     if (arena->AcquireLock()) {
-      //printf("AcquireLock addr: %p thread: %zu\n", arena, std::hash<std::thread::id>()(std::this_thread::get_id()));
       return arena;
     }
     arena = arena->next();
@@ -344,7 +437,7 @@ Regions::LocalArena* Regions::CentralArena::TlsAlloc() {
 
 
 void Regions::CentralArena::StoreNewLocalArena(Regions::LocalArena* arena) RASP_NOEXCEPT {
-  ScopedSpinLock lock(tree_lock_);
+  ScopedSpinLock lock(central_free_arena_lock_);
   if (arena_head_ == nullptr) {
     arena_head_ = arena_tail_ = arena;
   } else {
@@ -373,6 +466,7 @@ void Regions::FreeChunkStack::Unshift(Regions::Header* header) RASP_NOEXCEPT {
 
 RASP_INLINE Regions::Header* Regions::FreeChunkStack::Shift() RASP_NOEXCEPT {
   ScopedSpinLock lock(tree_lock_);
+  if (free_head_ == nullptr) {return nullptr;}
   Header* header = free_head_->ToHeader();
   ASSERT(true, header->IsMarkedAsDealloced());
   free_head_ = free_head_->ToNextPtr();
@@ -397,7 +491,7 @@ Regions::LocalArena::~LocalArena() {}
 
 
 void Regions::LocalArena::Return() {
-  central_arena_->FreeArena(this);
+  central_arena_->CollectGarbage(this);
 }
 // LocalArena inline end
 
