@@ -278,7 +278,7 @@ void Regions::CentralArena::FreeArena(Regions::LocalArena* arena) {
 
 
 void Regions::CentralArena::FreeMap(Regions::LocalArena* arena) {
-  //ScopedSpinLock lock(map_lock_);
+  ScopedSpinLock lock_(map_lock_);
   HugeChunkMap* map = arena->huge_free_chunk_map();
   huge_free_chunk_map_->insert(map->begin(), map->end());
   map->clear();

@@ -586,6 +586,7 @@ class Regions : private Uncopyable {
     SpinLock tree_lock_;
     SpinLock free_lock_;
     SpinLock map_lock_;
+    std::recursive_mutex mt_;
   };
   
 

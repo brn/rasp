@@ -36,12 +36,12 @@ class SpinLock {
   SpinLock() {unlock();}
   ~SpinLock() = default;
   RASP_INLINE void lock() RASP_NOEXCEPT {
-    while (lock_.test_and_set(std::memory_order_acquire)) {}
+    while (lock_.test_and_set(std::memory_order_seq_cst)) {}
   }
 
   
   RASP_INLINE void unlock() RASP_NOEXCEPT {
-    lock_.clear(std::memory_order_release);
+    lock_.clear(std::memory_order_seq_cst);
   }
 
  private:

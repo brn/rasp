@@ -90,7 +90,9 @@ void Mmap::InternalMmap::UnCommit() {
   Header* area = reinterpret_cast<Header*>(heap_);
   while (area != nullptr) {
     Header* tmp = area->ToNextPtr();
-    MapAllocator::Deallocate(area->ToBegin(), area->size() + sizeof(Header));
+    size_t size = area->size();
+    void* block = area->ToBegin();
+    MapAllocator::Deallocate(block, size);
     area = tmp;
   }
 }
@@ -107,11 +109,13 @@ void* Mmap::InternalMmap::Alloc(size_t size) {
   if (heap_ == nullptr) {
     heap = current_ = heap_ = MapAllocator::Allocate(map_size);
   } else {
-    heap = current_ = MapAllocator::Allocate(map_size);
+    heap = MapAllocator::Allocate(map_size);
+    reinterpret_cast<Header*>(current_)->set_next(reinterpret_cast<Header*>(heap));
+    current_ = heap;
   }
   real_ += map_size;
   used_ = 0u;
-  return AddHeader(heap, size);
+  return AddHeader(heap, map_size);
 }
 
 

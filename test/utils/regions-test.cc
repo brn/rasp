@@ -291,7 +291,7 @@ TEST_F(RegionsTest, RegionsTest_thread) {
     delete threads[i];
   }
 
-  BUSY_WAIT(index) {}
+  //BUSY_WAIT(index) {}
   
   p.Destroy();
   ASSERT_EQ(kSize * kThreadSize, ok);

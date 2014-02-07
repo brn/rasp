@@ -113,6 +113,7 @@ void Regions::CentralArena::Destroy() RASP_NOEXCEPT {
     IterateChunkList(chunk_list);
     arena = arena->next();
   }
+  tls_->Free();
   tls_->~Slot();
 }
 
