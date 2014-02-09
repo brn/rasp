@@ -12,21 +12,13 @@ import glob
 import shlex
 import gyp
 
+  
 
-def CheckThreads(builder, args) :
-  std_thread = builder.CheckHeader(False, ['thread', 'thread'], '')
-  stds = {};
-  boosts = {};
-  if not std_thread[0] :
-    result = builder.CheckLibAndHeader(True, [
-    {
-      'header' : ['boost/thread.hpp'],
-      'lib' : ['boost_thread-vc120-mt-1_55.lib', 'boost_thread-vc120-mt-gd-1_55.lib', 'libboost_thread-mt.a']
-    }
-    ], 'boost/thread is required.')
-    args.append('-Dboost_thread_lib_name=' + result[1])
+def BuildConfig(args) :
+  builder = configbuilder.ConfigBuilder('src/config.h', always_build=True)
+  builder.CheckHeader(True, ['thread'], 'thread required.')
 
-  stds['mutex'] = builder.CheckStruct(False, [
+  builder.CheckStruct(True, [
       {
         'name' : 'std::mutex',
         'header' : ['thread', 'mutex'],
@@ -34,55 +26,14 @@ def CheckThreads(builder, args) :
       }
       ], 'mutex required.')
 
-  boosts['mutex'] = builder.CheckStruct(False, [
-      {
-        'name' : 'boost::mutex',
-        'header' : ['boost/thread.hpp', 'boost/thread/condition.hpp'],
-        'struct': 'boost::mutex'
-        }
-      ], 'mutex required.')
-
-  stds['condition_variable'] = builder.CheckStruct(False, [
+  builder.CheckStruct(True, [
       {
         'name' : 'std::condition_variable',
         'header' : ['thread', 'condition_variable'],
         'struct': 'std::condition_variable'
       }
       ], 'condition_variable required.')
-
-  boosts['condition_variable'] = builder.CheckStruct(False, [
-      {
-        'name' : 'boost::condition_variable',
-        'header' : ['boost/thread/condition.hpp'],
-        'struct': 'boost::condition_variable'
-        }
-      ], 'condition_variable required.')
-
-  builder.CheckHeader(True, ['boost/thread/tss.hpp'], 'boost/thread/tss.hpp is required.')
-
-  builder.CheckStruct(True, [
-      {
-        'name' : 'boost::thread_specific_ptr',
-        'header' : ['boost/thread/tss.hpp'],
-        'struct' : 'boost::thread_specific_ptr<int>'
-        }
-      ], 'boost::thread_specific_ptr is required.')
-  
-  if std_thread[0] :
-    for std in stds :
-      if std[0] == False :
-        print 'std::' + std[1] + ' is required. Change a compiler or install boost library.'
-        sys.exit(1)
-
-  else :
-    for boost in boosts :
-      if boost[0] == False :
-        print 'boost::' + boost[1] + ' is required. You need to install boost library1.55.0 or later.'
-        sys.exit(1)
-
-def BuildConfig(args) :
-  builder = configbuilder.ConfigBuilder('src/config.h', always_build=True)
-  builder.CheckHeader(False, ['stdint.h'], '')
+  builder.CheckHeader(True, ['stdint.h'], '')
   builder.CheckHeader(True, ["unordered_map", "unordered_map", "boost/unordered_map.hpp"], 'unordered_map required.')
   builder.CheckStruct(True, [
       {
@@ -95,19 +46,13 @@ def BuildConfig(args) :
         'header' : ['boost/bind.hpp'],
         'function' : 'boost::bind(fopen, _1, "rb")'
         }], 'bind required.')
-  builder.CheckHeader(True, ['type_traits', 'boost/type_traits.hpp'], 'type_traits required.')
-  CheckThreads(builder, args)
-  builder.CheckHeader(True, ['tuple', 'std/tuple', 'boost/tuple'], 'tuple required.')
+  builder.CheckHeader(True, ['type_traits'], 'type_traits required.')
+  builder.CheckHeader(True, ['tuple', 'std/tuple'], 'tuple required.')
   builder.CheckStruct(True, [
       {
         'name' : 'std::function',
         'header' : ['functional'],
         'struct': 'std::function<int (int)>'
-      },
-      {
-        'name' : 'boost::function',
-        'header' : ["boost/function.hpp"],
-        'struct' : 'boost::function<int (int)>'
       }
     ], 'function required.')
   builder.CheckStruct(True, [
@@ -115,16 +60,6 @@ def BuildConfig(args) :
         'name' : 'std::shared_ptr',
         'header' : ['memory'],
         'struct': 'std::shared_ptr<const char>'
-      },
-      {
-        'name' : 'tr1::shared_ptr',
-        'header' : ['memory'],
-        'struct': 'std::tr1::shared_ptr<const char>'
-      },
-      {
-        'name' : 'boost::shared_ptr',
-        'header' : ["boost/shared_ptr.hpp"],
-        'struct' : 'boost::shared_ptr<const char>'
       }
     ], 'shared_ptr required.')
   builder.CheckStruct(True, [
@@ -132,11 +67,6 @@ def BuildConfig(args) :
         'name' : 'std::allocate_shared',
         'header' : ['memory'],
         'function': 'std::allocate_shared<char>(std::allocator<char>())'
-      },
-      {
-        'name' : 'boost::allocate_shared',
-        'header' : ["memory", "boost/shared_ptr.hpp", "boost/make_shared.hpp"],
-        'function' : 'boost::allocate_shared<char>(std::allocator<char>())'
       }
     ], 'allocate_shared required.')
 
@@ -145,11 +75,6 @@ def BuildConfig(args) :
         'name' : 'std::make_shared',
         'header' : ['memory'],
         'function': 'std::make_shared<char>(5)'
-      },
-      {
-        'name' : 'boost::make_shared',
-        'header' : ["memory", "boost/shared_ptr.hpp", "boost/make_shared.hpp"],
-        'function' : 'boost::make_shared<char>(5)'
       }
     ], 'allocate_shared required.')
 
@@ -158,26 +83,8 @@ def BuildConfig(args) :
         'name' : 'std::unique_ptr',
         'header' : ['memory'],
         'struct': 'std::unique_ptr<int>'
-      },
-      {
-        'name' : 'boost::unique_ptr',
-        'header' : ["boost/interprocess/smart_ptr/unique_ptr.hpp", 'boost/checked_delete.hpp'],
-        'struct' : 'boost::interprocess::unique_ptr<int, boost::checked_deleter<int> >'
       }
     ], 'unique_ptr is required.')
-
-  builder.CheckStruct(True, [
-      {
-        'name' : 'std::ref',
-        'header' : ['functional'],
-        'function': 'std::ref(printf)'
-      },
-      {
-        'name' : 'boost::ref',
-        'header' : ["boost/ref.hpp"],
-        'function' : 'boost::ref(printf)'
-      }
-    ], 'ref is required.')
 
   builder.CheckHeader(True, ["boost/preprocessor/repetition/repeat.hpp"], 'boost/preprocessor/repetition/repeat.hpp required.')
   builder.CheckHeader(True, ["boost/preprocessor/repetition/enum_params.hpp"], 'boost/preprocessor/repetition/enum_params.hpp required.')

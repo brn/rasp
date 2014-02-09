@@ -35,7 +35,7 @@ namespace rasp {namespace testing {
 inline std::string ReadFile(const char* filename) {
   std::ifstream in(filename, std::ios::binary);
   if (in.fail()) {
-    throw new std::runtime_error("Invalid file.");
+    throw std::move(std::runtime_error("Invalid file."));
   }
   std::stringstream buffer;
   buffer << in.rdbuf();

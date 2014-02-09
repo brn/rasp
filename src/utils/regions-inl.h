@@ -424,8 +424,17 @@ Regions::Header* Regions::CentralArena::FindFreeChunk(size_t size) {
   
   if (index < kMaxSmallObjectsCount) {
     ret = central_free_chunk_stack_[index].Shift();
-  } else if (huge_free_chunk_map_->count(index) > 0) {
-    ret = huge_free_chunk_map_->operator[](index)->Shift();
+  } else {
+    ScopedSpinLock lock(central_huge_free_map_lock_);
+    if (huge_free_chunk_map_->count(index) > 0) {
+      FreeChunkStack* free_chunk_stack = huge_free_chunk_map_->operator[](index);
+      if (free_chunk_stack->HasHead()) {
+        ret = free_chunk_stack->Shift();
+      }
+      if (!free_chunk_stack->HasHead()) {
+        huge_free_chunk_map_->erase(index);
+      }
+    }
   }
 
   return ret;
@@ -451,23 +460,19 @@ Regions::LocalArena* Regions::CentralArena::FindUnlockedArena() RASP_NOEXCEPT {
 
 
 Regions::LocalArena* Regions::CentralArena::TlsAlloc() {
-  LocalArena* arena = nullptr;
-  
+  LocalArena* arena = reinterpret_cast<LocalArena*>(tls_->Get());
   if (arena == nullptr) {
-    arena = reinterpret_cast<LocalArena*>(tls_->Get());
-    if (arena == nullptr) {
-      if (arena_head_ != nullptr) {
-        arena = FindUnlockedArena();
-      }
-      if (arena == nullptr) {
-        void* block = mmap_->Commit(sizeof(LocalArena));
-        arena = new(block) LocalArena(this, huge_chunk_allocator_);
-        arena->AcquireLock();
-        StoreNewLocalArena(arena);
-        tls_->Set(arena);
-        return arena;
-      }
+    if (arena_head_ != nullptr) {
+      arena = FindUnlockedArena();
     }
+    if (arena == nullptr) {
+      void* block = mmap_->Commit(sizeof(LocalArena));
+      arena = new(block) LocalArena(this, huge_chunk_allocator_);
+      arena->AcquireLock();
+      StoreNewLocalArena(arena);
+    }
+
+    tls_->Set(arena);
   }
   
   return arena;

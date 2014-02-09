@@ -3,6 +3,7 @@
   'make_global_settings': [
     ['CXX','/usr/bin/clang++'],
     ['LINK','/usr/bin/clang++'],
+    ['CXXFLAGS', '-std=c++11 -stdlib=libc++']
   ],
   'target_defaults': {
     'msvs_settings': {

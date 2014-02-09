@@ -127,7 +127,6 @@ void Regions::CentralArena::IterateChunkList(Regions::ChunkList* chunk_list) RAS
 
 
 void Regions::CentralArena::Dealloc(void* object) RASP_NOEXCEPT {
-  ScopedSpinLock lock(dealloc_lock_);
   Byte* block = reinterpret_cast<Byte*>(object);
   block -= Regions::kHeaderSize;
   Regions::Header* header = reinterpret_cast<Regions::Header*>(block);

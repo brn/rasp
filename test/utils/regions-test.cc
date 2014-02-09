@@ -30,8 +30,14 @@
 #include "../../src/utils/systeminfo.h"
 #include "../../src/utils/utils.h"
 
+namespace {
+size_t thread_size = rasp::SystemInfo::GetOnlineProcessorCount();
 static const uint64_t kSize = 1000000u;
-static const size_t kThreadSize = rasp::SystemInfo::GetOnlineProcessorCount();
+static const size_t kThreadSize = thread_size - 1 == 0? 1 : thread_size - 1;
+static const int kThreadObjectSize = 100000;
+static const int kStackSize = kThreadObjectSize * kThreadSize;
+}
+
 #define LOOP_FOR_THREAD_SIZE for (unsigned i = 0; i < kThreadSize; i++)
 #define BUSY_WAIT(counter) while (counter != kThreadSize)
 
@@ -52,29 +58,30 @@ class Test0 {
   uint64_t* ok;
 };
 
+template <typename T = uint64_t>
 class Test1 : public rasp::RegionalObject {
  public:
-  Test1(uint64_t* ok):rasp::RegionalObject(),ok(ok){}
+  Test1(T* ok):rasp::RegionalObject(),ok(ok){}
   ~Test1() {(*ok)++;}
-  uint64_t* ok;
+  T* ok;
 };
 
-
+template <typename T = uint64_t>
 class Test2 : public rasp::RegionalObject  {
  public:
-  Test2(uint64_t* ok):rasp::RegionalObject(),ok(ok){}
+  Test2(T* ok):rasp::RegionalObject(),ok(ok){}
   ~Test2() {(*ok)++;}
-  uint64_t* ok;
+  T* ok;
   uint64_t padding1 RASP_UNUSED;
   uint64_t padding2 RASP_UNUSED;
 };
 
-
+template <typename T = uint64_t>
 class Test3 : public rasp::RegionalObject  {
  public:
-  Test3(uint64_t* ok):rasp::RegionalObject(),ok(ok){}
+  Test3(T* ok):rasp::RegionalObject(),ok(ok){}
   ~Test3() {(*ok)++;}
-  uint64_t* ok;
+  T* ok;
   uint64_t padding1 RASP_UNUSED;
   uint64_t padding2 RASP_UNUSED;
   uint64_t padding3 RASP_UNUSED;
@@ -112,7 +119,7 @@ class Array : public rasp::RegionalObject {
 TEST_F(RegionsTest, RegionsTest_allocate_from_chunk) {
   uint64_t ok = 0u;
   rasp::Regions p(1024);
-  p.New<Test1>(&ok);
+  p.New<Test1<>>(&ok);
   p.Destroy();
   ASSERT_EQ(ok, 1u);
 }
@@ -121,7 +128,7 @@ TEST_F(RegionsTest, RegionsTest_allocate_from_chunk) {
 TEST_F(RegionsTest, RegionsTest_allocate_from_chunk_array) {
   uint64_t ok = 0u;
   rasp::Regions p(1024);
-  p.NewArray<Test1>(kSize, &ok);
+  p.NewArray<Test1<>>(kSize, &ok);
   p.Destroy();
   ASSERT_EQ(kSize, ok);
 }
@@ -131,7 +138,7 @@ TEST_F(RegionsTest, RegionsTest_allocate_many_from_chunk) {
   rasp::Regions p(1024);
   uint64_t ok = 0u;
   for (uint64_t i = 0u; i < kSize; i++) {
-    p.New<Test1>(&ok);
+    p.New<Test1<>>(&ok);
   }
   p.Destroy();
   ASSERT_EQ(kSize, ok);
@@ -149,11 +156,11 @@ TEST_F(RegionsTest, RegionsTest_allocate_many_from_chunk_random) {
     int t = s % 3 == 0;
     int f = s % 5 == 0;
     if (t) {
-      p.New<Test1>(&ok);
+      p.New<Test1<>>(&ok);
     } else if (f) {
-      p.New<Test2>(&ok);
+      p.New<Test2<>>(&ok);
     } else {
-      p.New<Test3>(&ok);
+      p.New<Test3<>>(&ok);
     }
   }
   p.Destroy();
@@ -165,7 +172,7 @@ TEST_F(RegionsTest, RegionsTest_allocate_many_from_chunk_and_dealloc) {
   uint64_t ok = 0u;
   rasp::Regions p(1024);
   for (uint64_t i = 0u; i < kSize; i++) {
-    Test1* t = p.New<Test1>(&ok);
+    Test1<>* t = p.New<Test1<>>(&ok);
     p.Dealloc(t);
   }
   p.Destroy();
@@ -193,11 +200,11 @@ TEST_F(RegionsTest, RegionsTest_allocate_many_from_chunk_random_and_dealloc) {
     }
     
     if (t) {
-      last = p.New<Test1>(&ok);
+      last = p.New<Test1<>>(&ok);
     } else if (f) {
-      last = p.New<Test2>(&ok);
+      last = p.New<Test2<>>(&ok);
     } else {
-      last = p.New<Test3>(&ok);
+      last = p.New<Test3<>>(&ok);
     }
   }
   p.Destroy();
@@ -243,9 +250,8 @@ TEST_F(RegionsTest, RegionsTest_allocate_many_big_object_and_dealloc) {
 TEST_F(RegionsTest, RegionsTest_performance1) {
   rasp::Regions p(1024);
   uint64_t ok = 0u;
-  Test1* stack[kSize];
   for (uint64_t i = 0u; i < kSize; i++) {
-    stack[i] = p.New<Test1>(&ok);
+    p.New<Test1<>>(&ok);
   }
   p.Destroy();
   ASSERT_EQ(kSize, ok);
@@ -266,7 +272,7 @@ TEST_F(RegionsTest, RegionsTest_performance2) {
 
 TEST_F(RegionsTest, RegionsTest_performance3) {
   uint64_t ok = 0u;
-  Test0* stack[kSize];
+  std::vector<Test0*> stack(kSize);
   for (uint64_t i = 0u; i < kSize; i++) {
     stack[i] = new Test0(&ok);
   }
@@ -278,14 +284,13 @@ TEST_F(RegionsTest, RegionsTest_performance3) {
 
 
 TEST_F(RegionsTest, RegionsTest_thread) {
-  static const int kSize = 100000;  
   uint64_t ok = 0u;
   rasp::Regions p(1024);
   std::atomic<unsigned> index(0);
   
   auto fn = [&]() {
-    for (uint64_t i = 0u; i < kSize; i++) {
-      p.New<Test1>(&ok);
+    for (uint64_t i = 0u; i < kThreadObjectSize; i++) {
+      p.New<Test1<>>(&ok);
     }
     index++;
   };
@@ -296,26 +301,24 @@ TEST_F(RegionsTest, RegionsTest_thread) {
     threads.push_back(th);
   }
   LOOP_FOR_THREAD_SIZE {
-    threads[i]->join();
+    threads[i]->detach();
     delete threads[i];
   }
 
-  //BUSY_WAIT(index) {}
+  BUSY_WAIT(index) {}
   
   p.Destroy();
-  ASSERT_EQ(kSize * kThreadSize, ok);
+  ASSERT_EQ(kThreadObjectSize * kThreadSize, ok);
 }
 
 
 TEST_F(RegionsTest, RegionsTest_thread_new) {
-  static const int kSize = 100000;
-  static const int kStackSize = kSize * kThreadSize;
   uint64_t ok = 0u;
-  Test0* stack[100000 * 4];
+  std::vector<Test0*> stack(kStackSize);
   std::atomic<unsigned> index(0);
   auto fn = [&](int id) {
-    int current = 100000 * id;
-    for (uint64_t i = 0u; i < kSize; i++) {
+    int current = kThreadObjectSize * id;
+    for (uint64_t i = 0u; i < kThreadObjectSize; i++) {
       stack[current + i] = new Test0(&ok);
     }
     index++;
@@ -337,12 +340,11 @@ TEST_F(RegionsTest, RegionsTest_thread_new) {
     delete stack[i];
   }
   
-  ASSERT_EQ(kSize * kThreadSize, ok);
+  ASSERT_EQ(kStackSize, ok);
 }
 
 
 TEST_F(RegionsTest, RegionsTest_thread_random) {
-  static const int kSize = 10000;
   uint64_t ok = 0u;
   rasp::Regions p(1024);
   std::atomic<unsigned> index(0);
@@ -350,16 +352,16 @@ TEST_F(RegionsTest, RegionsTest_thread_random) {
     std::random_device rd;
     std::mt19937 mt(rd());
     std::uniform_int_distribution<size_t> size(1, 100);
-    for (uint64_t i = 0u; i < kSize; i++) {
+    for (uint64_t i = 0u; i < kThreadObjectSize; i++) {
       int s = size(mt);
       int t = s % 3 == 0;
       int f = s % 5 == 0;
       if (t) {
-        p.New<Test1>(&ok);
+        p.New<Test1<>>(&ok);
       } else if (f) {
-        p.New<Test2>(&ok);
+        p.New<Test2<>>(&ok);
       } else {
-        p.New<Test3>(&ok);
+        p.New<Test3<>>(&ok);
       }
     }
     index++;
@@ -378,13 +380,12 @@ TEST_F(RegionsTest, RegionsTest_thread_random) {
   BUSY_WAIT(index) {}
   
   p.Destroy();
-  ASSERT_EQ(kSize * kThreadSize, ok);
+  ASSERT_EQ(kThreadObjectSize * kThreadSize, ok);
 }
 
 
 TEST_F(RegionsTest, RegionsTest_thread_random_dealloc) {
-  static const int kSize = 10000;
-  uint64_t ok = 0u;
+  std::atomic<uint64_t> ok(0u);
   rasp::Regions p(1024);
   std::atomic<unsigned> index(0);
   std::atomic<bool> wait(true);
@@ -395,7 +396,7 @@ TEST_F(RegionsTest, RegionsTest_thread_random_dealloc) {
     std::uniform_int_distribution<size_t> size(1, 100);
     void* last = nullptr;
     int dc =0;
-    for (uint64_t i = 0u; i < kSize; i++) {
+    for (uint64_t i = 0u; i < kThreadObjectSize; i++) {
       int s = size(mt);
       int ss = s % 6 == 0;
       int t = s % 3 == 0;
@@ -409,11 +410,11 @@ TEST_F(RegionsTest, RegionsTest_thread_random_dealloc) {
       }
     
       if (t) {
-        last = p.New<Test1>(&ok);
+        last = p.New<Test1<std::atomic<uint64_t>>>(&ok);
       } else if (f) {
-        last = p.New<Test2>(&ok);
+        last = p.New<Test2<std::atomic<uint64_t>>>(&ok);
       } else {
-        last = p.New<Test3>(&ok);
+        last = p.New<Test3<std::atomic<uint64_t>>>(&ok);
       }
     }
     index++;
@@ -432,5 +433,5 @@ TEST_F(RegionsTest, RegionsTest_thread_random_dealloc) {
 
   BUSY_WAIT(index) {}
   p.Destroy();
-  ASSERT_EQ(kSize * kThreadSize, ok);
+  ASSERT_EQ(kStackSize, ok);
 }

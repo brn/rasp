@@ -28,6 +28,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <cstdint>
 #include <unordered_map>
 #include <atomic>
 #include <new>
@@ -76,7 +77,7 @@ class Regions : private Uncopyable {
   class ChunkList;
   class FreeChunkStack;
   class CentralArena;
-  typedef Mmap::MmapStandardAllocator<std::pair<const size_t, Regions::ChunkList*>> HugeChunkAllocator;
+  typedef Mmap::MmapStandardAllocator<std::pair<const size_t, Regions::FreeChunkStack*>> HugeChunkAllocator;
   typedef std::unordered_map<size_t, Regions::FreeChunkStack*,
                              std::hash<size_t>,
                              std::equal_to<size_t>,
@@ -424,7 +425,7 @@ class Regions : private Uncopyable {
     /**
      * Swap head of free list to next and return last head.
      */
-    RASP_INLINE Regions::Header* Shift() RASP_NOEXCEPT;
+    inline Regions::Header* Shift() RASP_NOEXCEPT;
 
 
     RASP_INLINE bool HasHead() RASP_NO_SE {
@@ -678,16 +679,17 @@ class Regions : private Uncopyable {
      */
     RASP_INLINE void Return();
    private:
+    Mmap mmap_;
     CentralArena* central_arena_;
     std::atomic_flag lock_;
-    Mmap mmap_;
     ChunkList chunk_list_;
     FreeChunkStack free_chunk_stack_[kMaxSmallObjectsCount];
     HugeChunkMap huge_free_chunk_map_;
     LocalArena* next_;
   };
   
-
+  Mmap allocator_;
+  
   // The chunk list.
   CentralArena* central_arena_;
   LazyInitializer<CentralArena> central_arena_once_init_;
@@ -696,7 +698,6 @@ class Regions : private Uncopyable {
   size_t size_;
   std::atomic_flag deleted_;
   SpinLock tree_lock_;
-  Mmap allocator_;
 };
 
 } // namesapce rasp

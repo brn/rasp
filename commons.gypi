@@ -45,6 +45,7 @@
                 'RuntimeLibrary': 2, # debug release
               }],
             ],
+            'EnableFiberSafeOptimizations': 'true',
             'Optimization': 3, # /Ox, full optimization
             'FavorSizeOrSpeed': 1, # /Ot, favour speed over size
             'InlineFunctionExpansion': 2, # /Ob2, inline anything eligible
@@ -120,11 +121,9 @@
       }],
       [ 'OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris"', {
         'defines': [
-          'PLATFORM_POSIX'
+          'PLATFORM_POSIX',
+          '__STDC_LIMIT_MACROS'
         ],
-        'variables': {
-          'gcc_version%': '<!(python gcc_version.py)>)',
-        },
         'cflags': [ '-Wall' ],
         'cflags_cc': [ '-fno-rtti', '-fno-operator-names'],
         'conditions': [
@@ -141,10 +140,7 @@
           }, {
             'cflags': [ '-pthread' ],
             'ldflags': [ '-pthread' ],
-          }],          
-          [ 'visibility=="hidden" and gcc_version >= "4.0.0"', {
-            'cflags': [ '-fvisibility=hidden' ],
-          }],
+          }]
         ],
       }],
       ['OS=="mac"', {
